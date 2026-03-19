@@ -1,0 +1,65 @@
+# gradle
+
+.gradle/
+build/
+out/
+classes/
+
+# eclipse
+
+*.launch
+
+# idea
+
+.idea/
+*.iml
+*.ipr
+*.iws
+.out/
+
+# vscode
+
+.settings/
+.vscode/
+bin/
+.classpath
+.project
+
+# macos
+
+*.DS_Store
+
+# fabric
+
+run/
+
+# java
+
+hs_err_*.log
+replay_*.log
+*.hprof
+*.jfr
+
+
+# Minecraft 運行產生的文件 (避免把測試地圖進去)
+.run/
+runClient/
+runServer/
+logs/
+screenshots/
+resourcepacks/
+saves/
+config/
+
+# Fabric Loom 產生的映射表與臨時產物
+.gradle/loom-cache/
+.gradle/loom/
+
+# Java & OS 臨時文件
+*.class
+.DS_Store
+Thumbs.db
+
+# 個人設定與密鑰 (如果有配置發布到 Maven 的憑證)
+gradle.properties.user
+local.properties
