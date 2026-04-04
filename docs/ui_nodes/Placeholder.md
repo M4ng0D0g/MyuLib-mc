@@ -1,6 +1,6 @@
 # Placeholder
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/Placeholder.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/Placeholder.java`
 
 Description
 
@@ -15,7 +15,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val ph = Placeholder(40f, 20f)
 ```
 

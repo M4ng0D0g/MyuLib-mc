@@ -1,6 +1,6 @@
 # Stack
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/Stack.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/Stack.java`
 
 Description
 
@@ -13,7 +13,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val s = Stack()
 s.addChild(Image(...))
 s.addChild(Label("On top"))

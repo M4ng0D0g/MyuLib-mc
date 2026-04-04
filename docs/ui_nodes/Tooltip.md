@@ -1,6 +1,6 @@
 # Tooltip
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/Tooltip.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/Tooltip.java`
 
 Description
 
@@ -13,7 +13,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 // Attach TooltipComponent to an entity via MyulibApiClient.addComponent(entityId, TooltipComponent("Info"))
 ```
 

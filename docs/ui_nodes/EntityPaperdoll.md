@@ -1,6 +1,6 @@
 # EntityPaperdoll
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/EntityPaperdoll.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/EntityPaperdoll.java`
 
 Description
 
@@ -13,7 +13,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val paper = EntityPaperdoll()
 // set entity or equipment via component access
 ```

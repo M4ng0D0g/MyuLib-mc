@@ -1,6 +1,6 @@
 # ThemeLoader
 
-Path: `src/client/kotlin/com/myudog/myulib/client/internal/ui/theme/ThemeLoader.kt`
+Path: `src/client/java/com/myudog/myulib/client/internal/ui/theme/ThemeLoader.java`
 
 Description
 

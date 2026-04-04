@@ -1,6 +1,6 @@
 # RenderSystem
 
-Path: `src/client/kotlin/com/myudog/myulib/client/internal/ui/system/RenderSystem.kt`
+Path: `src/client/java/com/myudog/myulib/client/internal/ui/system/RenderSystem.java`
 
 Description
 
@@ -22,7 +22,7 @@ Usage example
 
 RenderSystem is normally invoked by a Screen's `render` override:
 
-```kotlin
+```java
 RenderSystem.render(world, context, mouseX, mouseY, delta)
 ```
 

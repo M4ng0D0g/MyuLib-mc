@@ -1,6 +1,6 @@
 # Image
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/Image.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/Image.java`
 
 Description
 
@@ -19,7 +19,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val img = Image(Identifier("mymod", "textures/gui/icon.png")).withUV(0,0,16,16)
 ```
 

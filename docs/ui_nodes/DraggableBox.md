@@ -1,6 +1,6 @@
 # DraggableBox
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/DraggableBox.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/DraggableBox.java`
 
 Description
 
@@ -15,7 +15,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val db = DraggableBox()
 // configure draggable component via MyulibApiClient if needed
 ```

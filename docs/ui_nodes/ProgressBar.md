@@ -1,6 +1,6 @@
 # ProgressBar
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/ProgressBar.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/ProgressBar.java`
 
 Description
 
@@ -19,7 +19,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val pb = ProgressBar().withProgress(0.5f).showPercentage()
 ```
 

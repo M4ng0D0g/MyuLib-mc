@@ -1,6 +1,6 @@
 # Dropdown
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/Dropdown.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/Dropdown.java`
 
 Description
 
@@ -16,7 +16,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val dd = Dropdown(120f).addOption("Easy").addOption("Normal").addOption("Hard").onSelect { idx -> println("selected $idx") }
 ```
 

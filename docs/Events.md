@@ -1,91 +1,81 @@
 # 事件系統使用說明（完整參考）
-
-本文檔提供專案內事件匯流排（Event Dispatcher）系統的完整參考，並示範如何在 world 範圍或全域範圍註冊與發佈事件。
-
-目錄
-- 概覽
-- 主要類別與函式
-- 使用範例：註冊、發佈、處理
-- 常見事件（ComponentAddedEvent、Timer 事件）與使用情境
-- 進階話題：同步/非同步、優先權、解除註冊
-- 除錯建議
-
----
-
-概覽
-
-專案採用簡單的事件匯流排（`EventDispatcherImpl`），設計為能在 `EcsWorld` 的 `eventBus` 中廣播事件。事件通常以 Kotlin data class 的形式定義，系統可訂閱事件類型以接收通告。
-
-主要類別與函式
-
-- `EventDispatcherImpl`（內部實作）
-  - `register(type: KClass<T>, handler: (T) -> Unit)` — 註冊一個事件類型的處理函式
-  - `dispatch(event: Any)` — 發佈事件，會同步通知所有註冊的處理器
-
-- `EcsWorld.eventBus` — 每個 world 有一個本地的 event bus，用於與該 world 範圍相關的事件通訊。
-
-使用範例
-
-1) 註冊監聽器
-
-```kotlin
-world.eventBus.register(MyCustomEvent::class) { evt ->
-    // 處理事件
-    println("Got event: ${evt}")
-}
+本文檔說明專案內的 Java 事件匯流排核心：`Event`、`FailableEvent`、`ProcessResult`、`EventPriority`、`EventListener`、`EventDispatcherImpl`、`ServerEventBus`，以及 `EcsWorld.eventBus` 的使用方式。
+## 概覽
+本專案採用同步事件匯流排。事件會依照註冊優先權由高到低觸發；只要某個 listener 回傳非 `PASS` 的 `ProcessResult`，分發就會立即停止。
+## 主要類別
+### `Event`
+所有事件的基礎 marker 介面。
+### `FailableEvent`
+可失敗事件介面。提供：
+- `getErrorMessage()`
+- `setErrorMessage(String)`
+### `ProcessResult`
+事件處理結果：
+- `PASS`：繼續往下傳遞
+- `CONSUME`：攔截並停止分發
+- `SUCCESS`：成功處理並停止分發
+- `FAILED`：處理失敗並停止分發
+### `EventPriority`
+預設優先權常數：
+- `HIGHEST = 0`
+- `HIGH = 1000`
+- `NORMAL = 2000`
+- `LOW = 3000`
+- `LOWEST = 4000`
+### `EventListener<T extends Event>`
+Java functional interface：
+```java
+ProcessResult handle(T event);
 ```
-
-2) 發佈事件
-
-```kotlin
-world.eventBus.dispatch(MyCustomEvent("payload"))
+### `EventDispatcherImpl`
+內部 dispatcher，提供：
+- `subscribe(Class<T>, EventListener<T>)`
+- `subscribe(Class<T>, int, EventListener<T>)`
+- `unsubscribe(Class<T>, EventListener<T>)`
+- `dispatch(Event)`
+### `ServerEventBus`
+共用的 server/common bus helper。可直接使用 static 方法：
+- `ServerEventBus.subscribe(...)`
+- `ServerEventBus.unsubscribe(...)`
+- `ServerEventBus.dispatch(...)`
+## 使用範例
+### 註冊 listener
+```java
+EventDispatcherImpl dispatcher = new EventDispatcherImpl();
+dispatcher.subscribe(ServerTickEvent.class, EventPriority.HIGH, event -> {
+    System.out.println("tick: " + event.getServer());
+    return ProcessResult.PASS;
+});
 ```
-
-3) 典型場景：系統間解耦（SpawnParticleEvent）
-
-- 遊戲邏輯層發佈 `SpawnParticleEvent`
-- `ParticleSystem` 在自身初始化時註冊該事件並在收到事件時實際產生粒子
-
-```kotlin
-// 在 ParticleSystem 初始化時
-world.eventBus.register(SpawnParticleEvent::class) { e -> ParticleSystem.spawn(e.data) }
-
-// 在其他地方
-world.eventBus.dispatch(SpawnParticleEvent(ParticleData(...)))
+### 發佈事件
+```java
+dispatcher.dispatch(new ServerTickEvent(server));
 ```
-
-常見事件
-
-- `ComponentAddedEvent`：`EcsWorld.addComponent` 會在加入 component 後自動派發這個事件，payload 包含 `entityId` 與 `component`。
-- `TimerStartedEvent`：timer 開始時觸發，包含 `TimerSnapshot`。
-- `TimerPausedEvent`：timer 暫停時觸發。
-- `TimerResumedEvent`：timer 恢復時觸發。
-- `TimerResetEvent`：timer 重製時觸發。
-- `TimerStoppedEvent`：timer 停止時觸發。
-- `TimerTickEvent`：每次 timer tick 更新時觸發。
-- `TimerCheckpointEvent`：命中特定 tick（elapsed 或 remaining）時觸發。
-- `TimerCompletedEvent`：timer 完成時觸發。
-
-### Timer 事件文件
-如果你要的是 timer 的完整 API 與 payload 範例，請看：
-
-- `docs/systems/TimerSystem.md`
-
-進階話題
-
-- 同步 vs 非同步：目前 `EventDispatcherImpl` 為同步呼叫（handler 會在 `dispatch` 中被一一執行）。若 handler 內執行重負載工作，請自行將耗時工作移交至 worker/thread pool。
-- 優先權：目前若需優先權處理，建議事件管理層再包一層或在註冊時管理 handler 的排序。
-- 解除註冊：事件系統應提供解除註冊的機制（例如回傳 token 或 handler 引用），如果目前沒有，建議實作以避免記憶體洩漏。
-
-除錯建議
-
-- 若 handler 沒有被呼叫，檢查：
-  - 是否註冊在正確的 `eventBus`（不同 world 有不同 eventBus）
-  - 事件類型是否匹配
-  - 是否有 exception 被拋出但被吞掉（在 dispatch 中增加錯誤日誌）
-
----
-
-若你需要，我可以：
-- 生成事件類型清單（從 `src` 掃描 `event` package）並把每個事件的參數/用途寫在文件中
-- 實作或補充 `EventDispatcherImpl` 的解除註冊/優先權支援（若你想要）
+### 取消事件或拦截原邏輯
+```java
+dispatcher.subscribe(EntitySpawnEvent.class, event -> {
+    if (event.getEntity() == null) {
+        event.setErrorMessage("entity missing");
+        return ProcessResult.FAILED;
+    }
+    return ProcessResult.PASS;
+});
+```
+## 常見事件
+- `EntitySpawnEvent`：實體準備生成時觸發，可攔截並附帶錯誤訊息。
+- `ServerTickEvent`：伺服器 tick 事件。
+- `ComponentAddedEvent`：`EcsWorld.addComponent(...)` 後自動派發。
+- `TimerStartedEvent` / `TimerPausedEvent` / `TimerResumedEvent` / `TimerResetEvent` / `TimerStoppedEvent` / `TimerTickEvent` / `TimerCheckpointEvent` / `TimerCompletedEvent`：請參考 `docs/systems/TimerSystem.md`。
+## `EcsWorld.eventBus`
+每個 `EcsWorld` 都有自己的 `eventBus`：
+```java
+EcsWorld world = new EcsWorld();
+world.eventBus.subscribe(ComponentAddedEvent.class, event -> {
+    System.out.println("added entity " + event.getEntityId());
+    return ProcessResult.PASS;
+});
+```
+## 注意事項
+- 目前 dispatcher 是同步執行。
+- 預設是依 priority 由小到大執行。
+- `dispatch` 以事件實際 class 作為 key；若要擴充成繼承鏈派發，可在 dispatcher 之後再包一層。

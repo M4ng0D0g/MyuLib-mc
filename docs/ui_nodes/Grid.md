@@ -1,6 +1,6 @@
 # Grid
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/Grid.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/Grid.java`
 
 Description
 
@@ -15,7 +15,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val grid = Grid()
 grid.addChild(ItemSlot())
 grid.addChild(ItemSlot())

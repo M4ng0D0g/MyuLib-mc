@@ -1,6 +1,6 @@
 # DataBoundList
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/DataBoundList.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/DataBoundList.java`
 
 Description
 
@@ -15,7 +15,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val list = DataBoundList(myProvider) { item -> Label(item.name) }
 ```
 

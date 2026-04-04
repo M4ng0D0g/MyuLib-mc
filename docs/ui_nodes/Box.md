@@ -1,6 +1,6 @@
 # Box
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/Box.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/Box.java`
 
 Description
 
@@ -18,7 +18,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val panel = Box().withTexture("ui/panel_main")
 panel.addChild(Label("Title"))
 ```

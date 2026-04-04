@@ -1,6 +1,6 @@
 # Panel
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/Panel.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/Panel.java`
 
 Description
 
@@ -15,7 +15,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val p = Panel()
 p.addChild(Label("Settings"))
 ```

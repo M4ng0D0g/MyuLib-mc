@@ -1,6 +1,6 @@
 # Button
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/Button.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/Button.java`
 
 Description
 
@@ -17,7 +17,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val btn = Button({ println("clicked") }).apply {
   // add a label as content
   addChild(Label("Click me"))

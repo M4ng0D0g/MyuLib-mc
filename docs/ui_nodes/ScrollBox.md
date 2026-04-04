@@ -1,6 +1,6 @@
 # ScrollBox
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/ScrollBox.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/ScrollBox.java`
 
 Description
 
@@ -18,7 +18,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val listBox = ScrollBox().apply {
     // add children (rows) to this container
 }

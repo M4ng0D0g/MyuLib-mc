@@ -1,6 +1,6 @@
 # PanCanvas
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/PanCanvas.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/PanCanvas.java`
 
 Description
 
@@ -14,7 +14,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val pan = PanCanvas()
 // configure panComponent if needed via MyulibApiClient.getComponent<PanCanvasComponent>(pan.entityId)
 ```

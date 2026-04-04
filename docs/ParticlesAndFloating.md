@@ -39,16 +39,16 @@
 
 粒子產生範例
 
-```kotlin
-val p = ParticleData(x = 120f, y = 60f, vx = (Math.random()-0.5).toFloat()*1.5f, vy = -2f, lifeMs = 600, color = 0xFFFFAA00.toInt(), size = 4f)
-ParticleSystem.spawn(p)
+```java
+ParticleData p = new ParticleData(120f, 60f, (float) ((Math.random() - 0.5) * 1.5f), -2f, 600L, 0xFFFFAA00, 4f);
+ParticleSystem.spawn(p);
 ```
 
 懸浮物體範例（飄字）
 
-```kotlin
-val ft = FloatingText(text = "+10 XP", x = 80f, y = 40f, durationMs = 900)
-FloatingManager.spawn(ft)
+```java
+FloatingText ft = new FloatingText("+10 XP", 80f, 40f, 900L);
+FloatingManager.spawn(ft);
 ```
 
 更新與渲染流程
@@ -61,9 +61,9 @@ FloatingManager.spawn(ft)
 
 建議透過事件系統進行 spawn：
 
-```kotlin
+```java
 // 註冊
-world.eventBus.register(SpawnParticleEvent::class) { e -> ParticleSystem.spawn(e.data) }
+world.eventBus.register(SpawnParticleEvent.class, e -> ParticleSystem.spawn(e.data));
 
 // 發佈
 world.eventBus.dispatch(SpawnParticleEvent(ParticleData(...)))

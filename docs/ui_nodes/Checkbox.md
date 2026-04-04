@@ -1,6 +1,6 @@
 # Checkbox
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/Checkbox.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/Checkbox.java`
 
 Description
 
@@ -23,7 +23,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val cb = Checkbox("Show hints", false).onToggle { checked -> println("checked=$checked") }
 ```
 

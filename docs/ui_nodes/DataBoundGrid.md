@@ -1,6 +1,6 @@
 # DataBoundGrid
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/DataBoundGrid.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/DataBoundGrid.java`
 
 Description
 
@@ -15,7 +15,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val grid = DataBoundGrid(myProvider) { item -> ItemSlot(item.stack) }
 ```
 

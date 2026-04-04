@@ -1,6 +1,6 @@
 # Label
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/Label.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/Label.java`
 
 Description
 
@@ -28,7 +28,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val lbl = Label("Hello World").centered().withColor(0xFFFFFF.toInt())
 lbl.setText("Updated")
 ```

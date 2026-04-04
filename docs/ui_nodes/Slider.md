@@ -1,6 +1,6 @@
 # Slider
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/Slider.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/Slider.java`
 
 Description
 
@@ -22,7 +22,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val s = Slider("Volume").withRange(0.0, 1.0).withValue(0.5).onValueChanged { v -> println(v) }
 ```
 

@@ -1,6 +1,6 @@
 # TabGroup
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/TabGroup.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/TabGroup.java`
 
 Description
 
@@ -13,7 +13,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val tg = TabGroup()
 // add TabButton children and content panels
 ```

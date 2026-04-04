@@ -1,6 +1,6 @@
 # InputSystem
 
-Path: `src/client/kotlin/com/myudog/myulib/client/internal/ui/system/InputSystem.kt`
+Path: `src/client/java/com/myudog/myulib/client/internal/ui/system/InputSystem.java`
 
 Description
 
@@ -34,7 +34,7 @@ Usage example
 
 Call from mapping layer (Screen override or adapter):
 
-```kotlin
+```java
 override fun mouseClicked(mouseX: Double, mouseY: Double, button: Int): Boolean {
     return InputSystem.onMouseDown(world, rootNodeId, mouseX, mouseY, button)
 }

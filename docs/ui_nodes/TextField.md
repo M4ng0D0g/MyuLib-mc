@@ -1,6 +1,6 @@
 # TextField
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/TextField.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/TextField.java`
 
 Description
 
@@ -19,7 +19,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val tf = TextField(200f).withPlaceholder("Enter name").onTextChanged { text -> println(text) }
 ```
 

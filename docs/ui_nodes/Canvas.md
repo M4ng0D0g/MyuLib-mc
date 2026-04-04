@@ -1,6 +1,6 @@
 # Canvas
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/Canvas.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/Canvas.java`
 
 Description
 
@@ -15,7 +15,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val hudCanvas = Canvas()
 val badge = Label("HP").apply { transform.offsetX = 10f; transform.offsetY = 20f }
 hudCanvas.addChild(badge)

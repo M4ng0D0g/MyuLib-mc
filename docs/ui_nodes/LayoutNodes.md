@@ -1,6 +1,6 @@
 # LayoutNodes
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/LayoutNodes.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/LayoutNodes.java`
 
 Description
 
@@ -12,7 +12,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val col = Column()
 col.addChild(Label("A"))
 col.addChild(Label("B"))

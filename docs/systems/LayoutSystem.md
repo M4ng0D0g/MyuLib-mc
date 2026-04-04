@@ -1,6 +1,6 @@
 # LayoutSystem
 
-Path: `src/client/kotlin/com/myudog/myulib/client/internal/ui/system/LayoutSystem.kt`
+Path: `src/client/java/com/myudog/myulib/client/internal/ui/system/LayoutSystem.java`
 
 Description
 
@@ -22,7 +22,7 @@ Usage example
 
 Layout is normally driven by the Screen or higher-level systems; to invoke manually:
 
-```kotlin
+```java
 // inside a screen render/init hook
 LayoutSystem.update(world, width.toFloat(), height.toFloat())
 ```

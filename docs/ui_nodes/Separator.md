@@ -1,6 +1,6 @@
 # Separator
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/Separator.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/Separator.java`
 
 Description
 
@@ -15,7 +15,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val sep = Separator()
 panel.addChild(sep)
 ```

@@ -1,6 +1,6 @@
 # ItemSlot
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/ItemSlot.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/ItemSlot.java`
 
 Description
 
@@ -20,7 +20,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val slot = ItemSlot().withStyle("inventory_slot").withPlaceholder(Identifier("mymod","textures/gui/empty_slot.png"))
 slot.stack = someItemStack
 ```

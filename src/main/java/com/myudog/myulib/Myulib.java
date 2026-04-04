@@ -1,0 +1,19 @@
+package com.myudog.myulib;
+
+import com.myudog.myulib.api.game.Game;
+import net.fabricmc.api.ModInitializer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+public final class Myulib implements ModInitializer {
+    private static final Logger LOGGER = LoggerFactory.getLogger("myulib");
+
+    @Override
+    public void onInitialize() {
+        LOGGER.info("Mango UI is initializing...");
+        Game.init();
+        LOGGER.info("MyuLib (by MyuDog) has been initialized successfully.");
+    }
+}
+
+

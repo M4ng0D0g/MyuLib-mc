@@ -1,6 +1,6 @@
 # ProcessIndicator
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/ProcessIndicator.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/ProcessIndicator.java`
 
 Description
 
@@ -13,7 +13,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val pi = ProcessIndicator()
 pi.showPercentage()
 ```

@@ -1,6 +1,6 @@
 # InteractiveSlot
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/InteractiveSlot.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/InteractiveSlot.java`
 
 Description
 
@@ -15,7 +15,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val islot = InteractiveSlot().apply {
     onRightClick = { stack -> println("right clicked: ${stack.item}") }
     onDoubleClick = { stack -> println("double clicked: ${stack.item}") }

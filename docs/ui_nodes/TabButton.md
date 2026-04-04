@@ -1,6 +1,6 @@
 # TabButton
 
-Path: `src/client/kotlin/com/myudog/myulib/client/api/ui/node/TabButton.kt`
+Path: `src/client/java/com/myudog/myulib/client/api/ui/node/TabButton.java`
 
 Description
 
@@ -13,7 +13,7 @@ Public API
 
 Usage example
 
-```kotlin
+```java
 val t = TabButton("Inventory")
 // add to TabGroup
 ```
