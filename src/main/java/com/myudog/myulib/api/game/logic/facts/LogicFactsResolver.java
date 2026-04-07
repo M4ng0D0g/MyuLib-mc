@@ -8,19 +8,28 @@ public interface LogicFactsResolver {
     };
 
     default int playerCount(GameInstance<?> instance) {
-        return 0;
+        return instance == null ? 0 : instance.teams().playerCount();
     }
 
     default int playerCountInTeam(GameInstance<?> instance, Identifier teamId) {
-        return 0;
+        return instance == null ? 0 : instance.teams().playerCount(teamId);
     }
 
     default boolean isOnTeam(GameInstance<?> instance, Identifier playerId, Identifier teamId) {
-        return false;
+        return instance != null && instance.teams().isOnTeam(playerId, teamId);
     }
 
     default boolean isRedTeam(GameInstance<?> instance, Identifier playerId) {
-        return false;
+        if (instance == null) {
+            return false;
+        }
+        Identifier teamId = instance.teams().teamOf(playerId);
+        if (teamId == null) {
+            return false;
+        }
+        return instance.teams().getDefinition(teamId)
+            .map(definition -> definition.color().isRed())
+            .orElse(false);
     }
 
     default int gameTimeTicks(GameInstance<?> instance) {

@@ -1,13 +1,13 @@
 package com.myudog.myulib.api.game;
 
 import com.myudog.myulib.api.game.bootstrap.GameBootstrapConfig;
+import com.myudog.myulib.api.game.bootstrap.GameObjectConfig;
 import com.myudog.myulib.api.game.components.ComponentManager;
 import com.myudog.myulib.api.game.feature.GameFeature;
 import com.myudog.myulib.api.game.feature.GameLogicFeature;
 import com.myudog.myulib.api.game.instance.GameInstance;
-import com.myudog.myulib.api.game.logic.LogicContracts;
-import com.myudog.myulib.api.game.logic.LogicSignals;
 import com.myudog.myulib.api.game.region.RegionManager;
+import com.myudog.myulib.api.game.team.GameTeamDefinition;
 import com.myudog.myulib.api.game.timer.TimerManager;
 import net.minecraft.util.Identifier;
 
@@ -57,13 +57,19 @@ public final class GameManager {
         for (GameFeature feature : definition.createFeatures(bootstrap)) {
             instance.putFeature(feature);
         }
+        instance.teams().clear();
+        for (GameTeamDefinition teamDefinition : definition.createTeams(bootstrap)) {
+            instance.teams().register(teamDefinition);
+        }
+        for (GameObjectConfig objectConfig : definition.createGameObjects(bootstrap)) {
+            instance.registerSpecialObject(objectConfig);
+        }
         instance.getFeatureOrCreate(GameLogicFeature.class).engine.setFactsResolver(definition.createLogicFactsResolver(bootstrap));
         instance.getFeatureOrCreate(GameLogicFeature.class).bind(instance);
         instance.getFeatureOrCreate(GameLogicFeature.class).engine.registerAll(definition.createLogicRules(bootstrap));
         RegionManager.bindInstance(instance, definition.createRegions(bootstrap));
         ComponentManager.bindInstance(instance, definition.createComponentBindings(bootstrap));
-        instance.objectBindings().clear();
-        bootstrap.specialObjects().values().forEach(configEntry -> instance.objectBindings().bind(configEntry, null));
+        bootstrap.specialObjects().values().forEach(instance::registerSpecialObject);
         INSTANCES.put(instanceId, instance);
         definition.onCreate(instance);
         instance.logicOrNull().publishGameCreated(instance);
@@ -91,6 +97,7 @@ public final class GameManager {
         return true;
     }
 
+    @SuppressWarnings("unchecked")
     public static <S extends Enum<S>> boolean transition(int instanceId, S to) {
         GameInstance<S> instance = (GameInstance<S>) INSTANCES.get(instanceId);
         return instance != null && instance.transition(to);

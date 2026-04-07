@@ -1,11 +1,13 @@
 package com.myudog.myulib.api.game.state;
 
 import com.myudog.myulib.api.game.bootstrap.GameBootstrapConfig;
+import com.myudog.myulib.api.game.bootstrap.GameObjectConfig;
 import com.myudog.myulib.api.game.components.ComponentModels.ComponentBindingDefinition;
 import com.myudog.myulib.api.game.feature.GameFeature;
 import com.myudog.myulib.api.game.instance.GameInstance;
 import com.myudog.myulib.api.game.logic.LogicContracts.LogicRule;
 import com.myudog.myulib.api.game.logic.facts.LogicFactsResolver;
+import com.myudog.myulib.api.game.team.GameTeamDefinition;
 import com.myudog.myulib.api.game.region.RegionModels.RegionDefinition;
 import net.minecraft.util.Identifier;
 
@@ -34,6 +36,14 @@ public abstract class GameDefinition<S extends Enum<S>> {
     }
 
     public List<GameFeature> createFeatures(GameBootstrapConfig config) {
+        return List.of();
+    }
+
+    public List<GameObjectConfig> createGameObjects(GameBootstrapConfig config) {
+        return List.of();
+    }
+
+    public List<GameTeamDefinition> createTeams(GameBootstrapConfig config) {
         return List.of();
     }
 
@@ -74,8 +84,12 @@ public abstract class GameDefinition<S extends Enum<S>> {
     }
 
     public void validateBootstrap(GameBootstrapConfig config) {
+        Set<Identifier> available = new java.util.LinkedHashSet<>(config.specialObjects().keySet());
+        for (GameObjectConfig objectConfig : createGameObjects(config)) {
+            available.add(objectConfig.id());
+        }
         for (Identifier required : getRequiredSpecialObjectIds()) {
-            if (!config.specialObjects().containsKey(required)) {
+            if (!available.contains(required)) {
                 throw new IllegalStateException("Missing required special object: " + required);
             }
         }

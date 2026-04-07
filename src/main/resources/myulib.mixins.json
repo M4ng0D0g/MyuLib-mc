@@ -3,7 +3,9 @@
 	"package": "com.myudog.myulib.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
-      "ExampleMixin"
+		"ExampleMixin",
+		"ServerPlayNetworkHandlerMixin",
+		"ServerPlayerEntityMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

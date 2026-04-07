@@ -1,9 +1,13 @@
-# Systems 入口索引
+# Systems (legacy)
 
-- [Game 系統](GameManager.md)
-- [Timer 系統](TimerSystem.md)
-- [Logic 系統](LogicSystem.md)
-- [Region 系統](RegionSystem.md)
-- [Component 系統](ComponentSystem.md)
-- [VFX / Particle API](VFX.md)
+This page is kept for backward compatibility.
 
+Canonical docs:
+- `docs/ui/index.md`
+- `docs/animation/index.md`
+- `docs/game/index.md`
+- `docs/timer/index.md`
+- `docs/logic/index.md`
+- `docs/region/index.md`
+- `docs/component/index.md`
+- `docs/floating/index.md`

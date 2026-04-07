@@ -1,9 +1,16 @@
-# API 參考索引
-- [Event API](event/EventCore.md)
-- [ECS API](ecs/EcsCore.md)
-- [Game API](game/GameCore.md)
-- [Timer API](timer/TimerCore.md)
-- [Logic API](logic/LogicCore.md)
-- [Region API](region/RegionCore.md)
-- [Component API](component/ComponentCore.md)
-- [Floating API](floating/FloatingCore.md)
+# API (legacy)
+
+This page is kept for backward compatibility.
+
+Canonical docs:
+- `README.md`
+- `docs/ecs/index.md`
+- `docs/event/index.md`
+- `docs/component/index.md`
+- `docs/region/index.md`
+- `docs/game/index.md`
+- `docs/timer/index.md`
+- `docs/logic/index.md`
+- `docs/floating/index.md`
+- `docs/animation/index.md`
+

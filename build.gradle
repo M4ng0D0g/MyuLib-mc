@@ -29,7 +29,7 @@ dependencies {
     mappings "net.fabricmc:yarn:${providers.gradleProperty('yarn_mappings').get()}:v2"
     modImplementation "net.fabricmc:fabric-loader:${providers.gradleProperty('loader_version').get()}"
     // Fabric API. This is technically optional, but you probably want it anyway.
-    clientImplementation "net.fabricmc.fabric-api:fabric-api:${providers.gradleProperty('fabric_api_version').get()}"
+//    clientImplementation "net.fabricmc.fabric-api:fabric-api:${providers.gradleProperty('fabric_api_version').get()}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${providers.gradleProperty('fabric_api_version').get()}"
 }
 tasks.processResources {
@@ -45,6 +45,18 @@ java {
     withSourcesJar()
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
+}
+tasks.register('runAnimationTests', JavaExec) {
+    group = 'verification'
+    description = 'Runs the standalone animation tests.'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.myudog.myulib.api.animation.AnimationTestSuite'
+}
+tasks.register('runGameFeatureTests', JavaExec) {
+    group = 'verification'
+    description = 'Runs the standalone game feature tests.'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.myudog.myulib.api.game.GameFeatureTestSuite'
 }
 tasks.jar {
     inputs.property('archivesName', base.archivesName)

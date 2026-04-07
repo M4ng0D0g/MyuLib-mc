@@ -10,6 +10,7 @@ import com.myudog.myulib.api.game.feature.GameLogicFeature;
 import com.myudog.myulib.api.game.feature.GameObjectBindingFeature;
 import com.myudog.myulib.api.game.feature.GameRegionFeature;
 import com.myudog.myulib.api.game.feature.GameScoreboardFeature;
+import com.myudog.myulib.api.game.feature.GameTeamFeature;
 import com.myudog.myulib.api.game.feature.GameTimerFeature;
 import com.myudog.myulib.api.game.logic.LogicSignals;
 import com.myudog.myulib.api.game.state.GameStateContext;
@@ -55,11 +56,20 @@ public class GameInstance<S extends Enum<S>> {
     public GameTimerFeature timers() { return getFeatureOrCreate(GameTimerFeature.class); }
     public GameScoreboardFeature scoreboard() { return getFeatureOrCreate(GameScoreboardFeature.class); }
     public GameObjectBindingFeature objectBindings() { return getFeatureOrCreate(GameObjectBindingFeature.class); }
+    public GameTeamFeature teams() { return getFeatureOrCreate(GameTeamFeature.class); }
     public GameRegionFeature regions() { return getFeatureOrCreate(GameRegionFeature.class); }
     public GameComponentFeature components() { return getFeatureOrCreate(GameComponentFeature.class); }
+    @SuppressWarnings("unchecked")
     public GameLogicFeature<S> logicOrNull() { return feature(GameLogicFeature.class); }
+    @SuppressWarnings("unchecked")
     public GameLogicFeature<S> logic() { return getFeatureOrCreate(GameLogicFeature.class); }
     public GameTimerFeature logicTimerFeatureOrNull() { return feature(GameTimerFeature.class); }
+
+    public GameObjectConfig registerSpecialObject(GameObjectConfig config) {
+        specialObjects.put(config.id(), config);
+        objectBindings().bind(config, null);
+        return config;
+    }
 
     public boolean canTransition(S to) { return enabled && definition.isTransitionAllowed(currentState, to); }
 
@@ -88,6 +98,10 @@ public class GameInstance<S extends Enum<S>> {
             return;
         }
         tickCount++;
+        GameObjectBindingFeature objectBindings = feature(GameObjectBindingFeature.class);
+        if (objectBindings != null) {
+            objectBindings.tick(this);
+        }
         definition.onTick(this);
     }
 
@@ -100,6 +114,10 @@ public class GameInstance<S extends Enum<S>> {
         GameLogicFeature<S> logic = logicOrNull();
         if (logic != null) {
             logic.publishGameDestroyed(this);
+        }
+        GameObjectBindingFeature objectBindings = feature(GameObjectBindingFeature.class);
+        if (objectBindings != null) {
+            objectBindings.clear(this);
         }
         features.clear();
     }
