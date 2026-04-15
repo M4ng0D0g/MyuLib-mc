@@ -7,55 +7,87 @@
 - `DENY`
 
 ## Resolution order
+1. Field scope
+2. Dimension scope
+3. Global scope
+
+Inside each scope, resolution order is:
 1. Player-level overrides
 2. RoleGroup grants / overrides
-3. Field scope
-4. Dimension scope
-5. World scope
+3. `everyone`
 
-A higher-priority scope may override a lower-priority one.
 `UNSET` means the current scope has no rule and evaluation should continue.
+If all scopes are `UNSET`, current default is `ALLOW`.
 
-## Interception flow
-The intended top-level interception path is:
+## Runtime flow
+- Rules are stored in `PermissionScope` and `PermissionTable`.
+- `PermissionManager.evaluate(...)` resolves the final decision.
+- Runtime interceptors use `PermissionGate` to map player + action + target position into evaluate calls.
 
-1. A mixin or gameplay hook captures the interaction before the action is applied.
-2. The hook builds a `WorldInteractionPermissionContext`.
-3. The hook passes that context to `WorldInteractionPermissionHooks.evaluate(...)` or `isDenied(...)`.
-4. `WorldInteractionPermissionHooks` converts it into a generic `PermissionContext`.
-5. `PermissionManager.evaluate(...)` resolves the decision across player, `RoleGroup`, `Field`, `Dimension`, and `World` scopes.
-
-`DENY` must stop the flow immediately.
-`UNSET` means the current scope had no applicable rule.
-`ALLOW` grants the action and ends evaluation.
-
-## Action set
+## Action set (latest `PermissionAction`)
 - `BLOCK_PLACE`
 - `BLOCK_BREAK`
+- `INTERACT_BLOCK`
+- `USE_BUCKET`
+- `IGNITE_BLOCK`
+- `TRAMPLE_FARMLAND`
 - `ATTACK_PLAYER`
 - `ATTACK_FRIENDLY_MOB`
 - `ATTACK_HOSTILE_MOB`
+- `INTERACT_ENTITY`
+- `RIDE_ENTITY`
+- `USE_SPAWN_EGG`
+- `ARMOR_STAND_MANIPULATE`
 - `USE_PROJECTILE`
 - `USE_ITEM`
-- `INTERACT_BLOCK`
-- `INTERACT_ENTITY`
+- `DROP_ITEM`
+- `PICKUP_ITEM`
+- `OPEN_CONTAINER`
 - `TRIGGER_REDSTONE`
 - `USE_PORTAL`
 - `SEND_MESSAGE`
 
 ## Public API
 - `PermissionDecision`
-- `PermissionLayer`
 - `PermissionAction`
-- `PermissionGrant`
-- `PermissionSeed`
-- `PermissionContext`
-- `WorldInteractionPermissionContext`
+- `PermissionScope`
+- `PermissionTable`
 - `PermissionManager`
-- `PermissionAdminService`
-- `WorldInteractionPermissionHooks`
+- `PermissionGate`
+- `PermissionStorage`
+- `NbtPermissionStorage`
 
-## Notes
-- `DENY` should short-circuit the world-interaction flow.
-- `UNSET` delegates to the next layer.
-- Role groups are managed in the `RoleGroup` system and contribute to permission resolution.
+## In-game command interface
+Command root: `/myulib:permission`
+
+- `create <group> <action> <decision>` (global scope)
+- `set global <group> <action> <decision>`
+- `set <scope> <scopeId> <group> <action> <decision>`
+- `read <group> <action>`
+- `player <player-selector>`
+- `delete <group> <action>`
+- `list <group>`
+- `list <group> <scope> <scopeId> <mode>`
+
+### Scope settings
+- `<scope>`: `global` | `dimension` | `field`
+- `set` supports direct global form without duplicated `global` token.
+- `<scopeId>`:
+  - `dimension`: dimension `Identifier` or dimension shortId
+  - `field`: field `Identifier` or field shortId
+  - `global`: placeholder token is accepted but ignored internally
+
+### List modes
+- `scope`: list direct decisions from a single scope only
+- `merged`: list compressed result with fallback chain `field -> dimension -> global`
+- list output is newline formatted for readability (`action=decision` per line)
+
+### Input completion
+- `<action>`: auto-suggested from all `PermissionAction` enum names.
+- `<decision>`: auto-suggested from all `PermissionDecision` enum names.
+- `<scopeId>`: when `scope=field|dimension`, auto-suggests both full id and shortId.
+- `<group>`: auto-suggests merged candidates from `RoleGroup` ids and known permission-table groups.
+
+### Group id normalization
+- Namespaced groups under `myulib` are normalized to path form for storage/evaluation (`myulib:everyone` => `everyone`).
+- This keeps command input and runtime resolution aligned.

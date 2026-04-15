@@ -50,7 +50,12 @@ public final class ClientCameraManager {
         }
         switch (payload.action()) {
             case SHAKE -> shake(payload.intensity(), payload.durationMillis());
-            case MOVE_TO -> moveTo(new Vec3(payload.targetX(), payload.targetY(), payload.targetZ()), payload.durationMillis(), payload.easing());
+            case MOVE_TO -> {
+                Vec3 target = payload.targetStaticPos();
+                if (target != null) {
+                    moveTo(target, payload.durationMillis(), payload.easing());
+                }
+            }
             case RESET -> clearModifiers();
         }
     }

@@ -1,6 +1,7 @@
 package com.myudog.myulib.api.ui;
 
 import com.myudog.myulib.api.permission.ScopeLayer;
+import net.minecraft.resources.Identifier;
 
 public final class ConfigurationUiRegistry {
     private static volatile ConfigurationUiBridge bridge;
@@ -16,28 +17,28 @@ public final class ConfigurationUiRegistry {
         return bridge;
     }
 
-    public static void openFieldEditor(String fieldId) {
+    public static void openFieldEditor(Identifier fieldId) {
         ConfigurationUiBridge current = bridge;
         if (current != null) {
             current.openFieldEditor(fieldId);
         }
     }
 
-    public static void openIdentityGroupEditor(String groupId) {
+    public static void openIdentityGroupEditor(Identifier groupId) {
         ConfigurationUiBridge current = bridge;
         if (current != null) {
             current.openIdentityGroupEditor(groupId);
         }
     }
 
-    public static void openRoleGroupEditor(String groupId) {
+    public static void openRoleGroupEditor(Identifier groupId) {
         ConfigurationUiBridge current = bridge;
         if (current != null) {
             current.openRoleGroupEditor(groupId);
         }
     }
 
-    public static void openTeamEditor(String teamId) {
+    public static void openTeamEditor(Identifier teamId) {
         ConfigurationUiBridge current = bridge;
         if (current != null) {
             current.openTeamEditor(teamId);

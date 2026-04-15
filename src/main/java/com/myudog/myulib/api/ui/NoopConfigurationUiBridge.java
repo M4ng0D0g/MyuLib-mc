@@ -1,24 +1,25 @@
 package com.myudog.myulib.api.ui;
 
 import com.myudog.myulib.api.permission.ScopeLayer;
+import net.minecraft.resources.Identifier;
 
 public enum NoopConfigurationUiBridge implements ConfigurationUiBridge {
     INSTANCE;
 
     @Override
-    public void openFieldEditor(String fieldId) {
+    public void openFieldEditor(Identifier fieldId) {
     }
 
     @Override
-    public void openIdentityGroupEditor(String groupId) {
+    public void openIdentityGroupEditor(Identifier groupId) {
     }
 
     @Override
-    public void openRoleGroupEditor(String groupId) {
+    public void openRoleGroupEditor(Identifier groupId) {
     }
 
     @Override
-    public void openTeamEditor(String teamId) {
+    public void openTeamEditor(Identifier teamId) {
     }
 
     @Override

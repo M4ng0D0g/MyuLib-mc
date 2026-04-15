@@ -12,9 +12,9 @@ final class TeamManagerTest {
     void teamIdsCanBeScopedByGameAndRemovedWithGameCleanup() {
         TeamManager.clear();
         Identifier gameId = Identifier.fromNamespaceAndPath("myulib", "respawn_game");
-        TeamDefinition team = new TeamDefinition("blue", Component.translatable("myulib.test.team.blue"), TeamColor.BLUE, new EnumMap<>(TeamFlag.class));
+        TeamDefinition team = new TeamDefinition(Identifier.fromNamespaceAndPath("myulib", "blue"), Component.translatable("myulib.test.team.blue"), TeamColor.BLUE, new EnumMap<>(TeamFlag.class));
         TeamDefinition scoped = TeamManager.register(gameId, team);
-        assertEquals("myulib:respawn_game:blue", scoped.id(), "Scoped team id should include the game namespace");
+        assertEquals(Identifier.fromNamespaceAndPath("myulib", "respawn_game_blue"), scoped.id(), "Scoped team id should include the game path prefix");
         assertEquals(1, TeamManager.all(gameId).size(), "Exactly one team should be registered for the game");
         assertEquals(scoped, TeamManager.get(scoped.id()), "Registered scoped team should be retrievable");
         UUID playerId = UUID.fromString("00000000-0000-0000-0000-000000000999");

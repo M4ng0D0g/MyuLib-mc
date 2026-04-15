@@ -1,5 +1,7 @@
 package com.myudog.myulib.api.game.state;
 
+import com.myudog.myulib.api.game.core.GameInstance;
+
 /**
  * [S] 遊戲狀態標記介面
  * 在輕量化架構中，通常由 Enum 實作此介面。
@@ -8,4 +10,13 @@ package com.myudog.myulib.api.game.state;
 public interface GameState {
     // Enum 預設會實作 name()，所以實作者不需要自己寫
     String name();
+
+    default void onEnter(GameInstance<?, ?, ?> instance) {
+    }
+
+    default void onTick(GameInstance<?, ?, ?> instance, long tickCount) {
+    }
+
+    default void onExit(GameInstance<?, ?, ?> instance) {
+    }
 }

@@ -1,7 +1,7 @@
 # Team System
 
-`Team` is now an independent system.
-Team entries can be scoped by game and use namespaced IDs such as `myulib:gameId:teamId`.
+`Team` is an independent system.
+Team IDs are `Identifier` and can be game-scoped (for example `myulib:<gameId>_<teamId>`).
 
 ## Public API
 - `com.myudog.myulib.api.team.TeamDefinition`
@@ -9,11 +9,17 @@ Team entries can be scoped by game and use namespaced IDs such as `myulib:gameId
 - `com.myudog.myulib.api.team.TeamAdminService`
 
 ## Notes
-- Use it for gameplay team membership.
-- Use `TeamManager.register(gameId, team)` to create a game-scoped team.
-- Use `TeamManager.all(gameId)` / `TeamManager.snapshot(gameId)` to inspect a game's team collection.
-- Use `TeamManager.forEachMember(teamId, action)` to apply batch operations to a whole team.
-- Use `TeamManager.unregisterGame(gameId)` or `TeamAdminService.deleteGameTeams(gameId)` when cleaning up a game.
-- `GameDefinition` no longer owns team construction; register teams directly with `TeamManager`.
-- Use `TeamAdminService.openEditor(...)` to request a configuration UI.
+- Use `TeamManager.register(gameId, team)` for game-scoped teams.
+- Use `TeamManager.all(gameId)` and `TeamManager.snapshot(gameId)` for inspection.
+- Use `TeamManager.forEachMember(teamId, action)` for batch operations.
+- Use `TeamManager.unregisterGame(gameId)` or `TeamAdminService.deleteGameTeams(gameId)` for cleanup.
+- `GameDefinition` no longer owns team construction.
 
+## In-game command interface
+Command root: `/myulib:team`
+
+- `create <id> <color>`
+- `read <id-or-shortId>`
+- `update <id-or-shortId> <color>`
+- `delete <id-or-shortId>`
+- `list`

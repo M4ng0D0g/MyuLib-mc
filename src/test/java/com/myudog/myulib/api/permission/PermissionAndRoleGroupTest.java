@@ -1,6 +1,7 @@
 package com.myudog.myulib.api.permission;
 import com.myudog.myulib.api.rolegroup.RoleGroupDefinition;
 import com.myudog.myulib.api.rolegroup.RoleGroupManager;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,17 +21,18 @@ final class PermissionAndRoleGroupTest {
     @Test
     void roleGroupDefinitionsNormalizeAndMembersAreResolved() {
         UUID playerId = UUID.fromString("00000000-0000-0000-0000-000000000777");
+        Identifier builderId = Identifier.fromNamespaceAndPath("myulib", "builders");
         RoleGroupDefinition builder = new RoleGroupDefinition(
-                "builders",
-                null,
+                builderId,
+                Component.literal("Builders"),
                 10,
                 Map.of("note", "builder"),
                 Set.of(playerId)
         );
-        assertEquals("builders", builder.displayName(), "Null display names should fall back to the group id");
+        assertEquals("Builders", builder.translationKey().getString(), "Display component should be preserved");
         assertTrue(builder.hasMember(playerId), "The constructor should preserve the member set");
         RoleGroupManager.register(builder);
-        assertTrue(RoleGroupManager.assign(playerId, "builders"), "The player should be assignable to the builders group");
+        assertTrue(RoleGroupManager.assign(playerId, builderId), "The player should be assignable to the builders group");
         assertEquals(List.of("builders", "everyone"), RoleGroupManager.getSortedGroupIdsOf(playerId),
                 "Builders should be ordered before everyone");
         assertTrue(RoleGroupManager.getPlayersInGroup("builders").contains(playerId),

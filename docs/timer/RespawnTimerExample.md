@@ -5,6 +5,6 @@ This example shows how to build a countdown timer and its payload with the curre
 - `payload(UUID, boolean)` builds a respawn payload.
 ## Example
 ```java
-TimerModels.Timer timer = RespawnTimerExample.timer();
-TimerModels.RespawnTimerPayload payload = RespawnTimerExample.payload(playerId, true);
+Timer timer = RespawnTimerExample.timer();
+RespawnTimerPayload payload = RespawnTimerExample.payload(playerId, true);
 ```

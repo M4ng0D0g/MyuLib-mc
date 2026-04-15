@@ -1,75 +1,183 @@
 package com.myudog.myulib.api.rolegroup;
 
-import net.minecraft.server.MinecraftServer;
+import com.myudog.myulib.Myulib;
+import com.myudog.myulib.api.debug.DebugFeature;
+import com.myudog.myulib.api.debug.DebugLogManager;
+import com.myudog.myulib.api.util.ShortIdRegistry;
+import com.myudog.myulib.api.rolegroup.storage.NbtRoleGroupStorage;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.Identifier;
 
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.UnaryOperator;
 
 public final class RoleGroupManager {
 
-    private static RoleGroupStorage STORAGE = new NbtRoleGroupStorage();
+    // 🌟 記憶體狀態
+    private static final Map<Identifier, RoleGroupDefinition> GROUPS = new ConcurrentHashMap<>();
+    private static final Map<UUID, Set<Identifier>> PLAYER_GROUPS = new ConcurrentHashMap<>();
+    private static final ShortIdRegistry ID_REGISTRY = new ShortIdRegistry(6);
+
+    // 🌟 注入你的專用 Storage 介面 (作為 DAO)
+    private static RoleGroupStorage storage;
 
     private RoleGroupManager() {}
 
     public static void install() {
-        STORAGE.ensureLoaded();
+        install(new NbtRoleGroupStorage());
+    }
 
-        // 系統啟動時，確保預設的 everyone 身分組存在
-        if (get("everyone") == null) {
-            register(new RoleGroupDefinition("everyone", "所有人", -999, Map.of(), Set.of()));
+    public static void install(RoleGroupStorage storageProvider) {
+        storage = storageProvider;
+
+        ServerLifecycleEvents.SERVER_STARTING.register(server -> {
+            if (storage != null) {
+                storage.initialize(server); // 讓 DAO 初始化
+                GROUPS.clear();
+                PLAYER_GROUPS.clear();
+                ID_REGISTRY.clear();
+
+                // 將 DAO 的資料全部載入記憶體
+                GROUPS.putAll(storage.loadGroups());
+                PLAYER_GROUPS.putAll(storage.loadAssignments());
+                for (Identifier id : GROUPS.keySet()) {
+                    ID_REGISTRY.generateAndBind(id);
+                }
+            }
+
+            // 系統啟動時，確保預設的 everyone 身分組存在
+            Identifier everyoneId = Identifier.fromNamespaceAndPath(Myulib.MOD_ID, "everyone");
+            if (!GROUPS.containsKey(everyoneId)) {
+                MutableComponent translationKey = Component.translatable("myulib.rolegroup.everyone");
+                register(new RoleGroupDefinition(everyoneId, translationKey, -999, Map.of(), Set.of()));
+            }
+        });
+
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> save());
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> clear());
+    }
+
+    public static RoleGroupDefinition register(RoleGroupDefinition group) {
+        GROUPS.put(group.id(), group);
+        String shortId = ID_REGISTRY.generateAndBind(group.id());
+        DebugLogManager.log(DebugFeature.ROLEGROUP,
+                "register id=" + group.id() + ",shortId=" + shortId + ",priority=" + group.priority());
+        if (storage != null) storage.saveGroup(group);
+        return group;
+    }
+
+    public static RoleGroupDefinition update(Identifier groupId, UnaryOperator<RoleGroupDefinition> updater) {
+        RoleGroupDefinition existing = GROUPS.get(groupId);
+        if (existing == null) return null;
+        RoleGroupDefinition updated = updater.apply(existing);
+        GROUPS.put(groupId, updated);
+        if (storage != null) storage.saveGroup(updated);
+        return updated;
+    }
+
+    public static RoleGroupDefinition delete(Identifier groupId) {
+        DebugLogManager.log(DebugFeature.ROLEGROUP, "delete id=" + groupId + ",shortId=" + ID_REGISTRY.getShortId(groupId));
+        if (storage != null) storage.deleteGroup(groupId);
+        ID_REGISTRY.unbind(groupId);
+
+        // 同時從所有玩家身上移除該身分組
+        PLAYER_GROUPS.values().forEach(set -> set.remove(groupId));
+        return GROUPS.remove(groupId);
+    }
+
+    public static RoleGroupDefinition get(Identifier groupId) { return GROUPS.get(groupId); }
+    public static List<RoleGroupDefinition> groups() { return List.copyOf(GROUPS.values()); }
+
+    public static boolean assign(UUID playerId, Identifier groupId) {
+        boolean added = PLAYER_GROUPS.computeIfAbsent(playerId, k -> new LinkedHashSet<>()).add(groupId);
+        if (added) {
+            DebugLogManager.log(DebugFeature.ROLEGROUP, "assign player=" + playerId + " -> group=" + groupId);
         }
+        if (added && storage != null) storage.saveAssignments(playerId, PLAYER_GROUPS.get(playerId));
+        return added;
     }
 
-    public static void bindServer(MinecraftServer server) { STORAGE.bindServer(server); }
-    public static void bindRoot(Path root) { STORAGE.bindRoot(root); }
+    public static boolean revoke(UUID playerId, Identifier groupId) {
+        Set<Identifier> groups = PLAYER_GROUPS.get(playerId);
+        if (groups != null && groups.remove(groupId)) {
+            DebugLogManager.log(DebugFeature.ROLEGROUP, "revoke player=" + playerId + " -> group=" + groupId);
+            if (storage != null) storage.saveAssignments(playerId, groups);
+            return true;
+        }
+        return false;
+    }
 
-    public static RoleGroupDefinition register(RoleGroupDefinition group) { return STORAGE.register(group); }
-    public static RoleGroupDefinition update(String groupId, UnaryOperator<RoleGroupDefinition> updater) { return STORAGE.update(groupId, updater); }
-    public static RoleGroupDefinition delete(String groupId) { return STORAGE.remove(groupId); }
-    public static RoleGroupDefinition get(String groupId) { return STORAGE.get(groupId); }
-    public static List<RoleGroupDefinition> groups() { return STORAGE.all(); }
+    // --- 🎯 雙向查詢系統 (全記憶體運算，瞬間完成) ---
 
-    public static boolean assign(UUID playerId, String groupId) { return STORAGE.assign(playerId, groupId); }
-    public static boolean revoke(UUID playerId, String groupId) { return STORAGE.revoke(playerId, groupId); }
-
-    // --- 🎯 雙向查詢系統 ---
-
-    /**
-     * 1. [群組找玩家] 取得擁有特定身分組的所有玩家 UUID
-     */
     public static Set<UUID> getPlayersInGroup(String groupId) {
-        return STORAGE.getPlayersInGroup(groupId);
+        Identifier targetId = toIdentifier(groupId);
+        Set<UUID> result = new HashSet<>();
+        for (Map.Entry<UUID, Set<Identifier>> entry : PLAYER_GROUPS.entrySet()) {
+            if (entry.getValue().contains(targetId)) {
+                result.add(entry.getKey());
+            }
+        }
+        return result;
     }
 
-    /**
-     * 2. [玩家找群組] 取得玩家擁有的身分組 ID 列表 (供 PermissionManager 使用)
-     * 特性：自動依照 priority 由高到低排序，且必定包含 "everyone" 在最後面。
-     */
     public static List<String> getSortedGroupIdsOf(UUID playerId) {
-        List<RoleGroupDefinition> groups = STORAGE.groupsOf(playerId);
+        Set<Identifier> assignedIds = PLAYER_GROUPS.getOrDefault(playerId, Set.of());
+
+        List<RoleGroupDefinition> assignedGroups = new ArrayList<>();
+        for (Identifier id : assignedIds) {
+            RoleGroupDefinition def = GROUPS.get(id);
+            if (def != null) assignedGroups.add(def);
+        }
+
+        // 依據 priority 排序 (需實作或確保 RoleGroupDefinition 有此比較器)
+        assignedGroups.sort((a, b) -> Integer.compare(b.priority(), a.priority()));
 
         List<String> sortedIds = new ArrayList<>();
-        for (RoleGroupDefinition def : groups) {
-            sortedIds.add(def.id());
+        for (RoleGroupDefinition def : assignedGroups) {
+            sortedIds.add(toGroupName(def.id()));
         }
 
-        // 強制確保 everyone 在列表的最尾端 (最低優先級)
         sortedIds.remove("everyone");
         sortedIds.add("everyone");
 
         return sortedIds;
     }
 
+    public static Identifier resolveShortId(String shortId) {
+        return ID_REGISTRY.getFullId(shortId);
+    }
+
+    public static String getShortIdOf(Identifier fullId) {
+        return ID_REGISTRY.getShortId(fullId);
+    }
+
+    private static Identifier toIdentifier(String groupId) {
+        if (groupId == null || groupId.isBlank()) {
+            return Identifier.fromNamespaceAndPath(Myulib.MOD_ID, "everyone");
+        }
+        if (groupId.contains(":")) {
+            return Identifier.parse(groupId);
+        }
+        return Identifier.fromNamespaceAndPath(Myulib.MOD_ID, groupId);
+    }
+
+    private static String toGroupName(Identifier id) {
+        if (id == null) {
+            return "";
+        }
+        return Myulib.MOD_ID.equals(id.getNamespace()) ? id.getPath() : id.toString();
+    }
+
     public static void save() {
-        STORAGE.markDirty();
+        // 如果有批次存檔需求可實作
     }
 
     public static void clear() {
-        STORAGE = new NbtRoleGroupStorage();
+        GROUPS.clear();
+        PLAYER_GROUPS.clear();
+        ID_REGISTRY.clear();
     }
 }

@@ -1,41 +1,72 @@
 package com.myudog.myulib.api.field;
 
+import com.myudog.myulib.api.field.storage.NbtFieldStorage;
+import com.myudog.myulib.api.debug.DebugFeature;
+import com.myudog.myulib.api.debug.DebugLogManager;
+import com.myudog.myulib.api.util.ShortIdRegistry;
+import com.myudog.myulib.api.storage.DataStorage;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class FieldManager {
 
-    // 綁定持久化儲存層
-    private static FieldStorage STORAGE = new NbtFieldStorage();
+    // 🌟 記憶體快取：所有查詢都在此進行，效能極高
+    private static final Map<Identifier, FieldDefinition> FIELDS = new ConcurrentHashMap<>();
+    private static final ShortIdRegistry ID_REGISTRY = new ShortIdRegistry(6);
+
+    // 🌟 注入的儲存介面
+    private static DataStorage<Identifier, FieldDefinition> storage;
 
     private FieldManager() {}
 
     public static void install() {
-        STORAGE.ensureLoaded();
+        install(new NbtFieldStorage());
     }
 
-    public static void bindServer(MinecraftServer server) {
-        STORAGE.bindServer(server);
+    public static void install(DataStorage<Identifier, FieldDefinition> storageProvider) {
+        storage = storageProvider;
+
+        // 1. 伺服器啟動時，初始化儲存並載入記憶體
+        ServerLifecycleEvents.SERVER_STARTING.register(server -> {
+            if (storage != null) {
+                storage.initialize(server);
+                FIELDS.clear();
+                ID_REGISTRY.clear();
+                Map<Identifier, FieldDefinition> loaded = storage.loadAll();
+                if (loaded != null) {
+                    FIELDS.putAll(loaded);
+                    for (Identifier id : loaded.keySet()) {
+                        ID_REGISTRY.generateAndBind(id);
+                    }
+                }
+                System.out.println("[Myulib] FieldManager 已成功載入 " + FIELDS.size() + " 個區域。");
+            }
+        });
+
+        // 2. 伺服器正在關閉時，強制存檔
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+            save();
+        });
+
+        // 3. 釋放記憶體
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+            clear();
+            System.out.println("[Myulib] FieldManager 已成功釋放！");
+        });
     }
 
-    /**
-     * 註冊一個新的區域。若與現有區域重疊，將直接拋出異常。
-     */
     public static FieldDefinition register(FieldDefinition field) {
         Objects.requireNonNull(field, "field 不得為空");
 
-        // 🛡️ 核心防護：檢查是否有空間重疊 (Overlap)
-        // 注意：這裡改為使用 STORAGE.getAll().values() 來遍歷
-        for (FieldDefinition existing : STORAGE.getAll().values()) {
-            // 只有在同一個維度才需要檢查重疊
+        // 🛡️ 空間重疊檢查 (直接遍歷記憶體)
+        for (FieldDefinition existing : FIELDS.values()) {
             if (existing.dimensionId().equals(field.dimensionId())) {
-
-                // 利用原版 AABB 極高效率的交集判定
                 if (existing.bounds().intersects(field.bounds())) {
                     throw new IllegalArgumentException(
                             String.format("註冊失敗！新區域 [%s] 與現有區域 [%s] 發生空間重疊！",
@@ -45,44 +76,61 @@ public final class FieldManager {
             }
         }
 
-        // 將場地寫入儲存層 (會自動觸發 NBT 存檔)
-        STORAGE.add(field);
+        FIELDS.put(field.id(), field);
+        String shortId = ID_REGISTRY.generateAndBind(field.id());
+        if (storage != null) storage.save(field.id(), field); // 同步至資料庫
+        DebugLogManager.log(DebugFeature.FIELD,
+                "register id=" + field.id() + ",shortId=" + shortId + ",dim=" + field.dimensionId()
+                        + ",min=(" + field.bounds().minX + "," + field.bounds().minY + "," + field.bounds().minZ + ")"
+                        + ",max=(" + field.bounds().maxX + "," + field.bounds().maxY + "," + field.bounds().maxZ + ")");
+
         return field;
     }
 
     public static void unregister(Identifier fieldId) {
-        STORAGE.remove(fieldId);
+        DebugLogManager.log(DebugFeature.FIELD, "unregister id=" + fieldId + ",shortId=" + ID_REGISTRY.getShortId(fieldId));
+        if (storage != null) storage.delete(fieldId);
+        FIELDS.remove(fieldId);
+        ID_REGISTRY.unbind(fieldId);
     }
 
     public static FieldDefinition get(Identifier fieldId) {
-        return STORAGE.getAll().get(fieldId);
+        return FIELDS.get(fieldId);
     }
 
     public static Map<Identifier, FieldDefinition> all() {
-        return STORAGE.getAll();
+        return Map.copyOf(FIELDS);
     }
 
-    /**
-     * 🎯 尋找包含特定座標的區域。
-     * 由於系統嚴格禁止重疊，一個座標最多只會存在於一個區域內。
-     * @return 找到的區域 (Optional 封裝以防 Null)
-     */
+    public static Identifier resolveShortId(String shortId) {
+        return ID_REGISTRY.getFullId(shortId);
+    }
+
+    public static String getShortIdOf(Identifier fullId) {
+        return ID_REGISTRY.getShortId(fullId);
+    }
+
     public static Optional<FieldDefinition> findAt(Identifier dimensionId, Vec3 pos) {
         if (dimensionId == null || pos == null) return Optional.empty();
 
-        for (FieldDefinition field : STORAGE.getAll().values()) {
+        for (FieldDefinition field : FIELDS.values()) {
             if (field.dimensionId().equals(dimensionId) && field.bounds().contains(pos)) {
-                return Optional.of(field); // 找到就立刻返回，效能極高
+                return Optional.of(field);
             }
         }
         return Optional.empty();
     }
 
     public static void save() {
-        STORAGE.markDirty();
+        if (storage != null) {
+            for (FieldDefinition field : FIELDS.values()) {
+                storage.save(field.id(), field);
+            }
+        }
     }
 
     public static void clear() {
-        STORAGE = new NbtFieldStorage();
+        FIELDS.clear();
+        ID_REGISTRY.clear();
     }
 }

@@ -21,7 +21,7 @@ public final class TeamAdminService {
         return TeamManager.register(gameId, team);
     }
 
-    public static TeamDefinition delete(String teamId) {
+    public static TeamDefinition delete(Identifier teamId) {
         return TeamManager.unregister(teamId);
     }
 
@@ -29,11 +29,11 @@ public final class TeamAdminService {
         return TeamManager.unregisterGame(gameId);
     }
 
-    public static TeamDefinition update(String teamId, UnaryOperator<TeamDefinition> updater) {
+    public static TeamDefinition update(Identifier teamId, UnaryOperator<TeamDefinition> updater) {
         return TeamManager.update(teamId, updater);
     }
 
-    public static boolean addPlayer(String teamId, UUID playerId) {
+    public static boolean addPlayer(Identifier teamId, UUID playerId) {
         return TeamManager.addPlayer(teamId, playerId);
     }
 
@@ -41,15 +41,15 @@ public final class TeamAdminService {
         return TeamManager.removePlayer(playerId);
     }
 
-    public static String teamOf(UUID playerId) {
+    public static Identifier teamOf(UUID playerId) {
         return TeamManager.teamOf(playerId);
     }
 
-    public static Set<UUID> members(String teamId) {
+    public static Set<UUID> members(Identifier teamId) {
         return TeamManager.members(teamId);
     }
 
-    public static void forEachMember(String teamId, java.util.function.Consumer<UUID> action) {
+    public static void forEachMember(Identifier teamId, java.util.function.Consumer<UUID> action) {
         TeamManager.forEachMember(teamId, action);
     }
 
@@ -61,15 +61,15 @@ public final class TeamAdminService {
         return TeamManager.all(gameId);
     }
 
-    public static Map<String, TeamDefinition> snapshot() {
+    public static Map<Identifier, TeamDefinition> snapshot() {
         return TeamManager.snapshot();
     }
 
-    public static Map<String, TeamDefinition> snapshot(Identifier gameId) {
+    public static Map<Identifier, TeamDefinition> snapshot(Identifier gameId) {
         return TeamManager.snapshot(gameId);
     }
 
-    public static void openEditor(String teamId, ConfigurationUiBridge ui) {
+    public static void openEditor(Identifier teamId, ConfigurationUiBridge ui) {
         if (ui != null) {
             ui.openTeamEditor(teamId);
         }

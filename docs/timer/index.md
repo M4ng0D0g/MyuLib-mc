@@ -1,12 +1,28 @@
 # Timer System
-The timer subsystem is currently provided by `TimerManager`, `TimerModels`, `TimerEvents`, `TimerPayloads`, and `RespawnTimerExample`.
+
+The timer subsystem is provided by standalone runtime classes.
+
 ## Current entry points
 - `TimerManager`
-- `TimerModels`
+- `TimerDefinition`
+- `TimerInstance`
+- `TimerSnapshot`
+- `TimerBinding`
+- `TimerPayload`
 - `TimerEvents`
-- `TimerPayloads`
-- `RespawnTimerExample`
+- `TimerMode`
+- `TimerStatus`
+
 ## Notes
-- `TimerModels` contains the nested timer enums, records, and instance class.
-- `TimerPayloads` is currently a namespace holder; the concrete payload records live in `TimerModels`.
-- Timer instances are updated through `TimerManager.update(...)`.
+- Timer definitions are registered by `Identifier`.
+- Instances are created with `TimerManager.createInstance(...)`.
+- Runtime updates are driven by `TimerManager.update(...)` via server tick.
+
+## In-game command interface
+Command root: `/myulib:timer`
+
+- `create <id> <ticks>`
+- `read <id>`
+- `update <id> <ticks>`
+- `delete <id>`
+- `list`

@@ -21,6 +21,14 @@ public class PermissionScope {
         return groupTables.computeIfAbsent(groupName, k -> new PermissionTable());
     }
 
+    public Map<UUID, PermissionTable> playerTablesSnapshot() {
+        return Map.copyOf(playerTables);
+    }
+
+    public Map<String, PermissionTable> groupTablesSnapshot() {
+        return Map.copyOf(groupTables);
+    }
+
     // --- 解析核心 ---
     /**
      * 查詢此作用域內的權限。

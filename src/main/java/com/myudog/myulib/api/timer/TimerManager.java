@@ -1,5 +1,10 @@
 package com.myudog.myulib.api.timer;
 
+import com.myudog.myulib.Myulib;
+import com.myudog.myulib.api.debug.DebugFeature;
+import com.myudog.myulib.api.debug.DebugLogManager;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 
@@ -9,23 +14,43 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 public class TimerManager {
-    private static final Map<Identifier, TimerModels.Timer> TIMERS = new LinkedHashMap<>();
-    private static final Map<Integer, TimerModels.TimerInstance> INSTANCES = new ConcurrentHashMap<>();
+    private static final Map<Identifier, TimerDefinition> TIMERS = new LinkedHashMap<>();
+    private static final Map<Integer, TimerInstance> INSTANCES = new ConcurrentHashMap<>();
     private static final AtomicInteger NEXT_INSTANCE_ID = new AtomicInteger(1);
 
     private TimerManager() {
     }
 
     public static void install() {
+        // 1. 掛載伺服器 Tick 事件 (驅動 Timer 的核心引擎)
+        // 呼叫我們之前優化過的 update 方法
+        ServerTickEvents.END_SERVER_TICK.register(TimerManager::update);
+
+        // 2. 掛載伺服器停止事件 (安全機制)
+        // 伺服器關閉時，清空所有的實例與藍圖，防止重啟或 /reload 時發生記憶體洩漏
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+            TIMERS.clear();
+            INSTANCES.clear();
+            NEXT_INSTANCE_ID.set(1);
+            System.out.println("[Myulib] TimerManager 已成功釋放！");
+
+        });
+
+        // 可選：印出啟動訊息方便 Debug
+        System.out.println("[Myulib] TimerManager 事件已成功掛載！");
     }
 
-    public static void register(TimerModels.Timer timer) {
+    public static void register(TimerDefinition timer) {
         TIMERS.put(timer.id, timer);
+        DebugLogManager.log(DebugFeature.TIMER,
+                "register id=" + timer.id + ",duration=" + timer.durationTicks + ",mode=" + timer.mode);
     }
 
-    public static TimerModels.Timer unregister(Identifier timerId) {
+    public static TimerDefinition unregister(Identifier timerId) {
+        DebugLogManager.log(DebugFeature.TIMER, "unregister id=" + timerId);
         return TIMERS.remove(timerId);
     }
 
@@ -33,38 +58,40 @@ public class TimerManager {
         return TIMERS.containsKey(timerId);
     }
 
-    public static int createInstance(Identifier timerId, Long ownerEntityId, TimerModels.TimerPayload payload, boolean autoStart, Object Level) {
-        TimerModels.Timer timer = TIMERS.get(timerId);
+    public static int createInstance(Identifier timerId, Long ownerEntityId, TimerPayload payload, boolean autoStart, Object Level) {
+        TimerDefinition timer = TIMERS.get(timerId);
         if (timer == null) {
             throw new IllegalArgumentException("Unknown timer: " + timerId);
         }
         int instanceId = NEXT_INSTANCE_ID.getAndIncrement();
-        TimerModels.TimerInstance instance = new TimerModels.TimerInstance(instanceId, timerId, ownerEntityId, payload);
+        TimerInstance instance = new TimerInstance(instanceId, timerId, ownerEntityId, payload);
         INSTANCES.put(instanceId, instance);
+        DebugLogManager.log(DebugFeature.TIMER,
+                "create instance=" + instanceId + ",timer=" + timerId + ",owner=" + ownerEntityId + ",autoStart=" + autoStart);
         if (autoStart) {
             start(instanceId);
         }
         return instanceId;
     }
 
-    public static TimerModels.TimerInstance getInstance(int timerEntityId, Object Level) {
+    public static TimerInstance getInstance(int timerEntityId, Object Level) {
         return INSTANCES.get(timerEntityId);
     }
 
-    public static TimerModels.TimerSnapshot getSnapshot(int timerEntityId) {
-        TimerModels.TimerInstance instance = INSTANCES.get(timerEntityId);
+    public static TimerSnapshot getSnapshot(int timerEntityId) {
+        TimerInstance instance = INSTANCES.get(timerEntityId);
         if (instance == null) {
             return null;
         }
-        TimerModels.Timer timer = TIMERS.get(instance.timerId);
+        TimerDefinition timer = TIMERS.get(instance.timerId);
         if (timer == null) {
             return null;
         }
         long remaining = Math.max(0L, timer.durationTicks - instance.elapsedTicks);
-        return new TimerModels.TimerSnapshot(timerEntityId, instance.ownerEntityId, timer, instance.status, instance.elapsedTicks, remaining, instance.payload, instance.lastUpdatedTick);
+        return new TimerSnapshot(timerEntityId, instance.ownerEntityId, timer, instance.status, instance.elapsedTicks, remaining, instance.payload, instance.lastUpdatedTick);
     }
 
-    public static List<TimerModels.TimerInstance> findInstances(Long ownerEntityId, Object Level) {
+    public static List<TimerInstance> findInstances(Long ownerEntityId, Object Level) {
         return INSTANCES.values().stream().filter(instance -> Objects.equals(instance.ownerEntityId, ownerEntityId)).toList();
     }
 
@@ -74,66 +101,89 @@ public class TimerManager {
     public static boolean isCompleted(int timerEntityId, Object Level) { return getInstance(timerEntityId, Level) != null && getInstance(timerEntityId, Level).isCompleted(); }
 
     public static void start(int timerEntityId) {
-        updateState(timerEntityId, TimerModels.TimerStatus.RUNNING, snapshot -> snapshot.timer().startedActions.forEach(action -> action.invoke(snapshot)));
+        updateState(timerEntityId, TimerStatus.RUNNING, snapshot -> snapshot.timer().startedActions.forEach(action -> action.invoke(snapshot)));
+    }
+
+    public static int start(long ticks, Consumer<Integer> onExpire) {
+        Identifier timerId = Identifier.fromNamespaceAndPath(Myulib.MOD_ID, "auto_timer_" + NEXT_INSTANCE_ID.get());
+        TimerDefinition timer = new TimerDefinition(timerId, ticks, TimerMode.COUNT_DOWN, true)
+                .onCompleted(snapshot -> {
+                    if (onExpire != null) {
+                        onExpire.accept(snapshot.timerEntityId());
+                    }
+                    unregister(timerId);
+                });
+        register(timer);
+        return createInstance(timerId, null, null, true, null);
     }
 
     public static void pause(int timerEntityId) {
-        updateState(timerEntityId, TimerModels.TimerStatus.PAUSED, snapshot -> snapshot.timer().pausedActions.forEach(action -> action.invoke(snapshot)));
+        updateState(timerEntityId, TimerStatus.PAUSED, snapshot -> snapshot.timer().pausedActions.forEach(action -> action.invoke(snapshot)));
     }
 
     public static void resume(int timerEntityId) {
-        updateState(timerEntityId, TimerModels.TimerStatus.RUNNING, snapshot -> snapshot.timer().resumedActions.forEach(action -> action.invoke(snapshot)));
+        updateState(timerEntityId, TimerStatus.RUNNING, snapshot -> snapshot.timer().resumedActions.forEach(action -> action.invoke(snapshot)));
     }
 
     public static void stop(int timerEntityId) {
-        updateState(timerEntityId, TimerModels.TimerStatus.STOPPED, snapshot -> snapshot.timer().stoppedActions.forEach(action -> action.invoke(snapshot)));
+        updateState(timerEntityId, TimerStatus.STOPPED, snapshot -> snapshot.timer().stoppedActions.forEach(action -> action.invoke(snapshot)));
     }
 
     public static void reset(int timerEntityId, boolean clearPayload) {
-        TimerModels.TimerInstance instance = INSTANCES.get(timerEntityId);
+        TimerInstance instance = INSTANCES.get(timerEntityId);
         if (instance == null) return;
         instance.elapsedTicks = 0;
         instance.lastUpdatedTick = 0;
         instance.pausedTicks = 0;
-        instance.status = TimerModels.TimerStatus.IDLE;
+        instance.status = TimerStatus.IDLE;
         if (clearPayload) {
             instance.payload = null;
         }
+        DebugLogManager.log(DebugFeature.TIMER,
+                "reset instance=" + timerEntityId + ",clearPayload=" + clearPayload);
     }
 
     public static void setElapsedTicks(int timerEntityId, long ticks) {
-        TimerModels.TimerInstance instance = INSTANCES.get(timerEntityId);
+        TimerInstance instance = INSTANCES.get(timerEntityId);
         if (instance != null) {
             instance.elapsedTicks = Math.max(0L, ticks);
         }
     }
 
     public static void setRemainingTicks(int timerEntityId, long ticks) {
-        TimerModels.TimerInstance instance = INSTANCES.get(timerEntityId);
+        TimerInstance instance = INSTANCES.get(timerEntityId);
         if (instance != null) {
-            TimerModels.Timer timer = TIMERS.get(instance.timerId);
+            TimerDefinition timer = TIMERS.get(instance.timerId);
             if (timer != null) {
                 setElapsedTicks(timerEntityId, Math.max(0L, timer.durationTicks - ticks));
             }
         }
     }
 
-    public static void setPayload(int timerEntityId, TimerModels.TimerPayload payload) {
-        TimerModels.TimerInstance instance = INSTANCES.get(timerEntityId);
+    public static void setPayload(int timerEntityId, TimerPayload payload) {
+        TimerInstance instance = INSTANCES.get(timerEntityId);
         if (instance != null) {
             instance.payload = payload;
         }
     }
 
+    public static int timerDefinitionCount() {
+        return TIMERS.size();
+    }
+
+    public static int timerInstanceCount() {
+        return INSTANCES.size();
+    }
+
 
     public static void update(MinecraftServer server) { // 建議將 Object Level 改為 MinecraftServer
         // 使用迭代器以便在遍歷時安全刪除已完成的實例
-        java.util.Iterator<Map.Entry<Integer, TimerModels.TimerInstance>> iterator = INSTANCES.entrySet().iterator();
+        java.util.Iterator<Map.Entry<Integer, TimerInstance>> iterator = INSTANCES.entrySet().iterator();
 
         while (iterator.hasNext()) {
-            Map.Entry<Integer, TimerModels.TimerInstance> entry = iterator.next();
+            Map.Entry<Integer, TimerInstance> entry = iterator.next();
             int id = entry.getKey();
-            TimerModels.TimerInstance instance = entry.getValue();
+            TimerInstance instance = entry.getValue();
 
             // 如果計時器已經停止或完成，直接從記憶體中移除以防止洩漏！
             if (instance.isStopped() || instance.isCompleted()) {
@@ -147,47 +197,51 @@ public class TimerManager {
 
             instance.elapsedTicks++;
             instance.lastUpdatedTick++;
-            TimerModels.Timer timer = TIMERS.get(instance.timerId);
+            TimerDefinition timer = TIMERS.get(instance.timerId);
 
             if (timer == null) continue;
 
-            TimerModels.TimerSnapshot snapshot = getSnapshot(id);
+            TimerSnapshot snapshot = getSnapshot(id);
             if (snapshot != null) {
                 long remaining = Math.max(0L, timer.durationTicks - instance.elapsedTicks);
 
                 // 🚀 效能優化：捨棄 Stream，改用傳統 foreach 避免每 Tick 產生大量 GC 垃圾
-                for (TimerModels.TimerBinding binding : timer.elapsedBindings.values()) {
-                    if (binding.basis() == TimerModels.TimerTickBasis.ELAPSED && binding.tick() == instance.elapsedTicks) {
+                for (TimerBinding binding : timer.elapsedBindings.values()) {
+                    if (binding.basis() == TimerTickBasis.ELAPSED && binding.tick() == instance.elapsedTicks) {
                         binding.action().invoke(snapshot);
                     }
                 }
 
-                for (TimerModels.TimerBinding binding : timer.remainingBindings.values()) {
-                    if (binding.basis() == TimerModels.TimerTickBasis.REMAINING && binding.tick() == remaining) {
+                for (TimerBinding binding : timer.remainingBindings.values()) {
+                    if (binding.basis() == TimerTickBasis.REMAINING && binding.tick() == remaining) {
                         binding.action().invoke(snapshot);
                     }
                 }
 
                 // 檢查是否完成
                 if (instance.elapsedTicks >= timer.durationTicks) {
-                    instance.status = TimerModels.TimerStatus.COMPLETED;
+                    instance.status = TimerStatus.COMPLETED;
                     timer.completedActions.forEach(action -> action.invoke(snapshot));
+                    DebugLogManager.log(DebugFeature.TIMER,
+                            "completed instance=" + id + ",timer=" + instance.timerId + ",elapsed=" + instance.elapsedTicks);
 
                     if (timer.autoStopOnComplete) {
-                        instance.status = TimerModels.TimerStatus.STOPPED;
+                        instance.status = TimerStatus.STOPPED;
                     }
                 }
             }
         }
     }
 
-    private static void updateState(int timerEntityId, TimerModels.TimerStatus status, java.util.function.Consumer<TimerModels.TimerSnapshot> actionConsumer) {
-        TimerModels.TimerInstance instance = INSTANCES.get(timerEntityId);
+    private static void updateState(int timerEntityId, TimerStatus status, java.util.function.Consumer<TimerSnapshot> actionConsumer) {
+        TimerInstance instance = INSTANCES.get(timerEntityId);
         if (instance == null) {
             return;
         }
         instance.status = status;
-        TimerModels.TimerSnapshot snapshot = getSnapshot(timerEntityId);
+        DebugLogManager.log(DebugFeature.TIMER,
+                "state instance=" + timerEntityId + " -> " + status);
+        TimerSnapshot snapshot = getSnapshot(timerEntityId);
         if (snapshot != null) {
             actionConsumer.accept(snapshot);
         }

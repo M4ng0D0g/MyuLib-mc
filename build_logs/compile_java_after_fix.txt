@@ -1,0 +1,31 @@
+
+> Configure project :
+Fabric Loom: 1.15.5
+
+> Task :compileJava FAILED
+D:\Minecraft\projects\MyuLib-mc\src\main\java\com\myudog\myulib\api\command\AccessCommandService.java:268: error: ')' or ',' expected
+        );
+         ^
+D:\Minecraft\projects\MyuLib-mc\src\main\java\com\myudog\myulib\api\command\AccessCommandService.java:476: error: ')' or ',' expected
+        );
+         ^
+2 errors
+
+[Incubating] Problems report is available at: file:///D:/Minecraft/projects/MyuLib-mc/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':compileJava'.
+> Compilation failed; see the compiler output below.
+  D:\Minecraft\projects\MyuLib-mc\src\main\java\com\myudog\myulib\api\command\AccessCommandService.java:268: error: ')' or ',' expected
+          );
+           ^
+  2 errors
+
+* Try:
+> Check your code and dependencies to fix the compilation error(s)
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+
+BUILD FAILED in 977ms
+1 actionable task: 1 executed

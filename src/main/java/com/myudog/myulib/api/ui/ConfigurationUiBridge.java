@@ -1,15 +1,16 @@
 package com.myudog.myulib.api.ui;
 
 import com.myudog.myulib.api.permission.ScopeLayer;
+import net.minecraft.resources.Identifier;
 
 public interface ConfigurationUiBridge {
-    void openFieldEditor(String fieldId);
+    void openFieldEditor(Identifier fieldId);
 
-    void openIdentityGroupEditor(String groupId);
+    void openIdentityGroupEditor(Identifier groupId);
 
-    void openRoleGroupEditor(String groupId);
+    void openRoleGroupEditor(Identifier groupId);
 
-    void openTeamEditor(String teamId);
+    void openTeamEditor(Identifier teamId);
 
     void openPermissionEditor(ScopeLayer layer, String scopeId);
 }

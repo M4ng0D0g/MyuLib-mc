@@ -1,101 +1,1143 @@
 package com.myudog.myulib.api.command;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.LongArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.myudog.myulib.Myulib;
+import com.myudog.myulib.api.control.ControlManager;
+import com.myudog.myulib.api.debug.DebugFeature;
+import com.myudog.myulib.api.debug.DebugLogManager;
+import com.myudog.myulib.api.debug.DebugTraceManager;
 import com.myudog.myulib.api.field.FieldDefinition;
+import com.myudog.myulib.api.field.FieldVisualizationManager;
 import com.myudog.myulib.api.field.FieldManager;
+import com.myudog.myulib.api.projection.ProjectionDefinition;
+import com.myudog.myulib.api.projection.ProjectionFeature;
+import com.myudog.myulib.api.projection.ProjectionManager;
+import com.myudog.myulib.api.projection.network.ProjectionNetworking;
+import com.myudog.myulib.api.game.core.GameConfig;
+import com.myudog.myulib.api.game.core.GameInstance;
+import com.myudog.myulib.api.game.core.GameManager;
 import com.myudog.myulib.api.permission.PermissionAction;
 import com.myudog.myulib.api.permission.PermissionDecision;
 import com.myudog.myulib.api.permission.PermissionManager;
+import com.myudog.myulib.api.permission.ScopeLayer;
 import com.myudog.myulib.api.rolegroup.RoleGroupDefinition;
 import com.myudog.myulib.api.rolegroup.RoleGroupManager;
+import com.myudog.myulib.api.team.TeamColor;
+import com.myudog.myulib.api.team.TeamDefinition;
+import com.myudog.myulib.api.team.TeamManager;
+import com.myudog.myulib.api.timer.TimerDefinition;
+import com.myudog.myulib.api.timer.TimerManager;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.permissions.Permission;
 import net.minecraft.server.permissions.PermissionLevel;
+import net.minecraft.world.phys.AABB;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
-import java.util.function.UnaryOperator;
 
 public class AccessCommandService {
+    public static final String COMMAND_PREFIX = Myulib.MOD_ID + ":";
+    private static final Set<Identifier> TRACKED_TIMERS = new LinkedHashSet<>();
 
     public static void registerDefaults() {
+        registerLocalCommands();
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-            // 這裡呼叫了下方實作的指令樹
-            registerMyulibBaseCommand(dispatcher);
+            registerLegacyBaseCommand(dispatcher, Myulib.MOD_ID);
+            registerFeatureCrudCommands(dispatcher);
         });
     }
 
-    /**
-     * 🛠️ 實作基礎的 /myulib 指令樹 (解決 cannot find symbol 錯誤)
-     */
-    private static void registerMyulibBaseCommand(CommandDispatcher<CommandSourceStack> dispatcher) {
+    private static void registerLocalCommands() {
+        CommandRegistry.register(COMMAND_PREFIX + "save", context -> {
+            saveAll();
+            return CommandResult.success("saved");
+        });
+        CommandRegistry.register(COMMAND_PREFIX + "status", context -> CommandResult.success(buildStatusLine()));
 
-        dispatcher.register(Commands.literal("myulib")
-                        .requires(source -> source.permissions().hasPermission(
-                                new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS)
-                        )) // 需要管理員權限 (OP 等級 2)
+        registerLocalCrudMirror("field");
+        registerLocalCrudMirror("permission");
+        registerLocalCrudMirror("rolegroup");
+        registerLocalCrudMirror("team");
+        registerLocalCrudMirror("game");
+        registerLocalCrudMirror("timer");
 
-                        // 子指令：/myulib save (強制手動存檔)
-                        .then(Commands.literal("save")
-                                .executes(context -> {
-                                    PermissionManager.save();
-                                    FieldManager.save();
-                                    RoleGroupManager.save();
+        // Keep existing quick test mirrors.
+        CommandRegistry.register(COMMAND_PREFIX + "field:count", context -> CommandResult.success("field=" + FieldManager.all().size()));
+        CommandRegistry.register(COMMAND_PREFIX + "permission:save", context -> {
+            PermissionManager.save();
+            return CommandResult.success("permission_saved");
+        });
+        CommandRegistry.register(COMMAND_PREFIX + "permission:set-global", context -> {
+            String group = normalizeGroupToken(context.arguments().getOrDefault("group", "everyone"));
+            PermissionAction action = parseAction(context.arguments().getOrDefault("action", "BLOCK_BREAK"));
+            PermissionDecision decision = parseDecision(context.arguments().getOrDefault("decision", "DENY"));
+            grantGlobalPermission(group, action, decision);
+            return CommandResult.success("permission=set:global," + group + "," + action + "=" + decision);
+        });
+        CommandRegistry.register(COMMAND_PREFIX + "rolegroup:count", context -> CommandResult.success("rolegroup=" + RoleGroupManager.groups().size()));
+        CommandRegistry.register(COMMAND_PREFIX + "team:count", context -> CommandResult.success("team=" + TeamManager.all().size()));
+        CommandRegistry.register(COMMAND_PREFIX + "game:count", context -> CommandResult.success("game_instance=" + GameManager.getInstances().size()));
+        CommandRegistry.register(COMMAND_PREFIX + "timer:count", context -> CommandResult.success("timer=" + TimerManager.timerDefinitionCount() + ",instance=" + TimerManager.timerInstanceCount()));
+        CommandRegistry.register(COMMAND_PREFIX + "camera:status", context -> CommandResult.success("camera_bridge_ready"));
+        CommandRegistry.register(COMMAND_PREFIX + "control:status", context -> CommandResult.success("control_bindings=" + ControlManager.controlledCount() + ",input_buffer=" + ControlManager.bufferedInputCount()));
+    }
 
-                                    context.getSource().sendSuccess(
-                                            () -> Component.literal("§a[Myulib] 所有資料已成功手動寫入 NBT 存檔！"),
-                                            true
-                                    );
-                                    return 1;
-                                })
-                        )
-                // 未來你的 `/myulib group create <id>` 等指令都可以繼續掛在這裡
-                // 並在 executes 內呼叫下方的 Service 方法
+    private static void registerLocalCrudMirror(String feature) {
+        for (String op : List.of("create", "read", "update", "delete", "list")) {
+            CommandRegistry.register(COMMAND_PREFIX + feature + ":" + op,
+                    context -> CommandResult.success("ok:" + feature + ":" + op));
+        }
+    }
+
+    private static void registerLegacyBaseCommand(CommandDispatcher<CommandSourceStack> dispatcher, String rootLiteral) {
+        dispatcher.register(Commands.literal(rootLiteral)
+                .requires(source -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS)))
+                .then(Commands.literal("save").executes(context -> reply(context.getSource(), "[Myulib] saved: " + saveAll())))
+                .then(Commands.literal("status").executes(context -> reply(context.getSource(), "[Myulib] " + buildStatusLine())))
         );
     }
 
-    // ====================================================================
-    // 以下為內部服務封裝 (Service Layer)，供指令或外部 API 呼叫
-    // ====================================================================
-
-    // --- RoleGroup (身分組) ---
-    public static void createRoleGroup(String groupId, String displayName, int priority) {
-        RoleGroupDefinition group = new RoleGroupDefinition(groupId, displayName, priority, Map.of(), Set.of());
-        RoleGroupManager.register(group);
-        RoleGroupManager.save(); // 💡 新增資料後觸發存檔
+    private static void registerFeatureCrudCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
+        registerFieldCrud(dispatcher);
+        registerProjectionCrud(dispatcher);
+        registerPermissionCrud(dispatcher);
+        registerRoleGroupCrud(dispatcher);
+        registerTeamCrud(dispatcher);
+        registerGameCrud(dispatcher);
+        registerTimerCrud(dispatcher);
+        registerDebugCommands(dispatcher);
     }
 
-    public static void deleteRoleGroup(String groupId) {
+    private static void registerFieldCrud(CommandDispatcher<CommandSourceStack> dispatcher) {
+        var root = Commands.literal(COMMAND_PREFIX + "field")
+                .requires(source -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS)));
+
+        root.then(Commands.literal("create")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("x1", DoubleArgumentType.doubleArg())
+                                .then(Commands.argument("y1", DoubleArgumentType.doubleArg())
+                                        .then(Commands.argument("z1", DoubleArgumentType.doubleArg())
+                                                .then(Commands.argument("x2", DoubleArgumentType.doubleArg())
+                                                        .then(Commands.argument("y2", DoubleArgumentType.doubleArg())
+                                                                .then(Commands.argument("z2", DoubleArgumentType.doubleArg())
+                                                                        .executes(context -> {
+                                                                            Identifier fieldId = Identifier.parse(StringArgumentType.getString(context, "id"));
+                                                                            Identifier dimId = context.getSource().getLevel().dimension().identifier();
+                                                                            double x1 = DoubleArgumentType.getDouble(context, "x1");
+                                                                            double y1 = DoubleArgumentType.getDouble(context, "y1");
+                                                                            double z1 = DoubleArgumentType.getDouble(context, "z1");
+                                                                            double x2 = DoubleArgumentType.getDouble(context, "x2");
+                                                                            double y2 = DoubleArgumentType.getDouble(context, "y2");
+                                                                            double z2 = DoubleArgumentType.getDouble(context, "z2");
+                                                                            AABB bounds = cuboidFromCorners(x1, y1, z1, x2, y2, z2);
+                                                                            createField(new FieldDefinition(fieldId, dimId, bounds, Map.of("source", "command")));
+                                                                            return reply(context.getSource(), "field=create:" + fieldId);
+                                                                        })))))))));
+
+        root.then(Commands.literal("read")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .suggests((context, builder) -> SharedSuggestionProvider.suggest(fieldIdSuggestions(), builder))
+                        .executes(context -> {
+                            Identifier fieldId = resolveFieldIdToken(StringArgumentType.getString(context, "id"));
+                            FieldDefinition field = fieldId == null ? null : FieldManager.get(fieldId);
+                            if (field == null) {
+                                return reply(context.getSource(), "field=not_found");
+                            }
+                            return reply(context.getSource(), "field=id:" + field.id() + ",dim:" + field.dimensionId());
+                        })));
+
+        root.then(Commands.literal("update")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .suggests((context, builder) -> SharedSuggestionProvider.suggest(fieldIdSuggestions(), builder))
+                        .executes(context -> {
+                            Identifier fieldId = resolveFieldIdToken(StringArgumentType.getString(context, "id"));
+                            if (fieldId == null) {
+                                return reply(context.getSource(), "field=not_found");
+                            }
+                            FieldDefinition existing = FieldManager.get(fieldId);
+                            if (existing == null) {
+                                return reply(context.getSource(), "field=not_found");
+                            }
+                            FieldManager.unregister(fieldId);
+                            createField(new FieldDefinition(existing.id(), existing.dimensionId(), existing.bounds(), Map.of("updated", "true")));
+                            return reply(context.getSource(), "field=updated:" + fieldId);
+                        })));
+
+        root.then(Commands.literal("delete")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .suggests((context, builder) -> SharedSuggestionProvider.suggest(fieldIdSuggestions(), builder))
+                        .executes(context -> {
+                            Identifier fieldId = resolveFieldIdToken(StringArgumentType.getString(context, "id"));
+                            if (fieldId == null || FieldManager.get(fieldId) == null) {
+                                return reply(context.getSource(), "field=not_found");
+                            }
+                            deleteField(fieldId);
+                            return reply(context.getSource(), "field=deleted:" + fieldId);
+                        })));
+
+        root.then(Commands.literal("list")
+                .executes(context -> reply(context.getSource(), "field=count:" + FieldManager.all().size())));
+
+        root.then(Commands.literal("visualize")
+                .then(Commands.literal("on")
+                        .executes(context -> {
+                            if (context.getSource().getPlayer() == null) {
+                                return reply(context.getSource(), "field=visualize:player_only");
+                            }
+                            FieldVisualizationManager.enable(context.getSource().getPlayer().getUUID());
+                            return reply(context.getSource(), "field=visualize:on");
+                        }))
+                .then(Commands.literal("off")
+                        .executes(context -> {
+                            if (context.getSource().getPlayer() == null) {
+                                return reply(context.getSource(), "field=visualize:player_only");
+                            }
+                            var player = context.getSource().getPlayer();
+                            FieldVisualizationManager.disable(player.getUUID());
+                            ProjectionNetworking.syncToPlayer(player, List.of());
+                            return reply(context.getSource(), "field=visualize:off");
+                        }))
+                .then(Commands.literal("status")
+                        .executes(context -> {
+                            if (context.getSource().getPlayer() == null) {
+                                return reply(context.getSource(), "field=visualize:player_only");
+                            }
+                            var playerId = context.getSource().getPlayer().getUUID();
+                            boolean enabled = FieldVisualizationManager.isEnabled(playerId);
+                            var style = FieldVisualizationManager.getStyle(playerId);
+                            return reply(context.getSource(), "field=visualize:" + (enabled ? "on" : "off")
+                                    + ",radius=" + FieldVisualizationManager.getRadius(playerId)
+                                    + ",mode=" + FieldVisualizationManager.getMode(playerId).token()
+                                    + ",points=" + onOff(style.showPoints())
+                                    + ",lines=" + onOff(style.showLines())
+                                    + ",faces=" + onOff(style.showFaces())
+                                    + ",name=" + onOff(style.showName())
+                                    + ",axes=" + onOff(style.showAxes()));
+                        }))
+                .then(Commands.literal("radius")
+                        .then(Commands.argument("value", IntegerArgumentType.integer(8, 256))
+                                .executes(context -> {
+                                    if (context.getSource().getPlayer() == null) {
+                                        return reply(context.getSource(), "field=visualize:player_only");
+                                    }
+                                    var playerId = context.getSource().getPlayer().getUUID();
+                                    int value = IntegerArgumentType.getInteger(context, "value");
+                                    FieldVisualizationManager.setRadius(playerId, value);
+                                    return reply(context.getSource(), "field=visualize:radius=" + FieldVisualizationManager.getRadius(playerId));
+                                })))
+                .then(Commands.literal("mode")
+                        .then(Commands.argument("value", StringArgumentType.word())
+                                .suggests((context, builder) -> SharedSuggestionProvider.suggest(fieldModeSuggestions(), builder))
+                                .executes(context -> {
+                                    if (context.getSource().getPlayer() == null) {
+                                        return reply(context.getSource(), "field=visualize:player_only");
+                                    }
+                                    var playerId = context.getSource().getPlayer().getUUID();
+                                    String raw = StringArgumentType.getString(context, "value");
+                                    FieldVisualizationManager.setMode(playerId, FieldVisualizationManager.DisplayMode.parse(raw));
+                                    return reply(context.getSource(), "field=visualize:mode=" + FieldVisualizationManager.getMode(playerId).token());
+                                })))
+                .then(Commands.literal("show")
+                        .then(Commands.argument("feature", StringArgumentType.word())
+                                .suggests((context, builder) -> SharedSuggestionProvider.suggest(projectionFeatureSuggestions(), builder))
+                                .then(Commands.argument("enabled", StringArgumentType.word())
+                                        .suggests((context, builder) -> SharedSuggestionProvider.suggest(List.of("on", "off"), builder))
+                                        .executes(context -> {
+                                            if (context.getSource().getPlayer() == null) {
+                                                return reply(context.getSource(), "field=visualize:player_only");
+                                            }
+                                            var playerId = context.getSource().getPlayer().getUUID();
+                                            ProjectionFeature feature = ProjectionFeature.parse(StringArgumentType.getString(context, "feature"));
+                                            boolean enabled = "on".equalsIgnoreCase(StringArgumentType.getString(context, "enabled"));
+                                            FieldVisualizationManager.setFeature(playerId, feature, enabled);
+                                            return reply(context.getSource(), "field=visualize:show:" + feature.token() + "=" + onOff(enabled));
+                                        }))))
+        );
+
+        dispatcher.register(root);
+    }
+
+    private static void registerDebugCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
+        var root = Commands.literal(COMMAND_PREFIX + "debug")
+                .requires(source -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS)));
+
+        root.then(Commands.literal("on").executes(context -> {
+            if (context.getSource().getPlayer() == null) {
+                return reply(context.getSource(), "debug=player_only");
+            }
+            var playerId = context.getSource().getPlayer().getUUID();
+            DebugLogManager.enable(playerId);
+            return reply(context.getSource(), "debug=on");
+        }));
+
+        root.then(Commands.literal("off").executes(context -> {
+            if (context.getSource().getPlayer() == null) {
+                return reply(context.getSource(), "debug=player_only");
+            }
+            var playerId = context.getSource().getPlayer().getUUID();
+            DebugLogManager.disable(playerId);
+            return reply(context.getSource(), "debug=off");
+        }));
+
+        root.then(Commands.literal("feature")
+                .then(Commands.argument("name", StringArgumentType.word())
+                        .suggests((context, builder) -> SharedSuggestionProvider.suggest(debugFeatureSuggestions(), builder))
+                        .then(Commands.argument("enabled", StringArgumentType.word())
+                                .suggests((context, builder) -> SharedSuggestionProvider.suggest(List.of("on", "off"), builder))
+                                .executes(context -> {
+                                    if (context.getSource().getPlayer() == null) {
+                                        return reply(context.getSource(), "debug=player_only");
+                                    }
+                                    var playerId = context.getSource().getPlayer().getUUID();
+                                    DebugFeature feature = DebugFeature.parse(StringArgumentType.getString(context, "name"));
+                                    boolean enabled = "on".equalsIgnoreCase(StringArgumentType.getString(context, "enabled"));
+                                    DebugLogManager.setFeature(playerId, feature, enabled);
+                                    return reply(context.getSource(), "debug=feature:" + feature.token() + "=" + (enabled ? "on" : "off"));
+                                }))));
+
+        root.then(Commands.literal("all")
+                .then(Commands.argument("enabled", StringArgumentType.word())
+                        .suggests((context, builder) -> SharedSuggestionProvider.suggest(List.of("on", "off"), builder))
+                        .executes(context -> {
+                            if (context.getSource().getPlayer() == null) {
+                                return reply(context.getSource(), "debug=player_only");
+                            }
+                            var playerId = context.getSource().getPlayer().getUUID();
+                            boolean enabled = "on".equalsIgnoreCase(StringArgumentType.getString(context, "enabled"));
+                            DebugLogManager.setAll(playerId, enabled);
+                            return reply(context.getSource(), "debug=all=" + (enabled ? "on" : "off"));
+                        })));
+
+        root.then(Commands.literal("status").executes(context -> {
+            if (context.getSource().getPlayer() == null) {
+                return reply(context.getSource(), "debug=player_only");
+            }
+            var playerId = context.getSource().getPlayer().getUUID();
+            String status = DebugLogManager.isEnabled(playerId) ? "on" : "off";
+            String features = DebugLogManager.getFeatures(playerId).stream().map(DebugFeature::token).sorted().reduce((a, b) -> a + "|" + b).orElse("none");
+            return reply(context.getSource(), "debug=status=" + status + "\nfeatures=" + features);
+        }));
+
+        root.then(Commands.literal("trace")
+                .then(Commands.literal("on").executes(context -> {
+                    if (context.getSource().getPlayer() == null) {
+                        return reply(context.getSource(), "debug=player_only");
+                    }
+                    var playerId = context.getSource().getPlayer().getUUID();
+                    DebugTraceManager.enable(playerId);
+                    return reply(context.getSource(), "debug=trace:on");
+                }))
+                .then(Commands.literal("off").executes(context -> {
+                    if (context.getSource().getPlayer() == null) {
+                        return reply(context.getSource(), "debug=player_only");
+                    }
+                    var playerId = context.getSource().getPlayer().getUUID();
+                    DebugTraceManager.disable(playerId);
+                    return reply(context.getSource(), "debug=trace:off");
+                }))
+                .then(Commands.literal("status").executes(context -> {
+                    if (context.getSource().getPlayer() == null) {
+                        return reply(context.getSource(), "debug=player_only");
+                    }
+                    var playerId = context.getSource().getPlayer().getUUID();
+                    return reply(context.getSource(), "debug=trace:" + (DebugTraceManager.isEnabled(playerId) ? "on" : "off"));
+                })));
+
+        dispatcher.register(root);
+    }
+
+    private static void registerProjectionCrud(CommandDispatcher<CommandSourceStack> dispatcher) {
+        var root = Commands.literal(COMMAND_PREFIX + "projection")
+                .requires(source -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS)));
+
+        root.then(Commands.literal("create")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .then(Commands.argument("x1", DoubleArgumentType.doubleArg())
+                                .then(Commands.argument("y1", DoubleArgumentType.doubleArg())
+                                        .then(Commands.argument("z1", DoubleArgumentType.doubleArg())
+                                                .then(Commands.argument("x2", DoubleArgumentType.doubleArg())
+                                                        .then(Commands.argument("y2", DoubleArgumentType.doubleArg())
+                                                                .then(Commands.argument("z2", DoubleArgumentType.doubleArg())
+                                                                        .executes(context -> {
+                                                                            Identifier id = Identifier.parse(StringArgumentType.getString(context, "id"));
+                                                                            Identifier dimId = context.getSource().getLevel().dimension().identifier();
+                                                                            double x1 = DoubleArgumentType.getDouble(context, "x1");
+                                                                            double y1 = DoubleArgumentType.getDouble(context, "y1");
+                                                                            double z1 = DoubleArgumentType.getDouble(context, "z1");
+                                                                            double x2 = DoubleArgumentType.getDouble(context, "x2");
+                                                                            double y2 = DoubleArgumentType.getDouble(context, "y2");
+                                                                            double z2 = DoubleArgumentType.getDouble(context, "z2");
+                                                                            AABB bounds = ProjectionManager.cuboidFromCorners(x1, y1, z1, x2, y2, z2);
+                                                                            ProjectionManager.register(new ProjectionDefinition(id, dimId, bounds, id.toString()));
+                                                                            return reply(context.getSource(), "projection=create:" + id);
+                                                                        })))))))));
+
+        root.then(Commands.literal("read")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .suggests((context, builder) -> SharedSuggestionProvider.suggest(projectionIdSuggestions(), builder))
+                        .executes(context -> {
+                            Identifier id = resolveProjectionIdToken(StringArgumentType.getString(context, "id"));
+                            ProjectionDefinition projection = id == null ? null : ProjectionManager.get(id);
+                            if (projection == null) {
+                                return reply(context.getSource(), "projection=not_found");
+                            }
+                            return reply(context.getSource(), "projection=id:" + projection.id() + ",dim:" + projection.dimensionId());
+                        })));
+
+        root.then(Commands.literal("delete")
+                .then(Commands.argument("id", StringArgumentType.word())
+                        .suggests((context, builder) -> SharedSuggestionProvider.suggest(projectionIdSuggestions(), builder))
+                        .executes(context -> {
+                            Identifier id = resolveProjectionIdToken(StringArgumentType.getString(context, "id"));
+                            if (id == null || ProjectionManager.get(id) == null) {
+                                return reply(context.getSource(), "projection=not_found");
+                            }
+                            ProjectionManager.unregister(id);
+                            return reply(context.getSource(), "projection=deleted:" + id);
+                        })));
+
+        root.then(Commands.literal("list")
+                .executes(context -> reply(context.getSource(), "projection=count:" + ProjectionManager.all().size())));
+
+        root.then(Commands.literal("visualize")
+                .then(Commands.literal("on")
+                        .executes(context -> {
+                            if (context.getSource().getPlayer() == null) {
+                                return reply(context.getSource(), "projection=visualize:player_only");
+                            }
+                            FieldVisualizationManager.enable(context.getSource().getPlayer().getUUID());
+                            return reply(context.getSource(), "projection=visualize:on");
+                        }))
+                .then(Commands.literal("off")
+                        .executes(context -> {
+                            if (context.getSource().getPlayer() == null) {
+                                return reply(context.getSource(), "projection=visualize:player_only");
+                            }
+                            var player = context.getSource().getPlayer();
+                            FieldVisualizationManager.disable(player.getUUID());
+                            ProjectionNetworking.syncToPlayer(player, List.of());
+                            return reply(context.getSource(), "projection=visualize:off");
+                        }))
+                .then(Commands.literal("status")
+                        .executes(context -> {
+                            if (context.getSource().getPlayer() == null) {
+                                return reply(context.getSource(), "projection=visualize:player_only");
+                            }
+                            var playerId = context.getSource().getPlayer().getUUID();
+                            var style = FieldVisualizationManager.getStyle(playerId);
+                            boolean enabled = FieldVisualizationManager.isEnabled(playerId);
+                            return reply(context.getSource(), "projection=visualize:" + (enabled ? "on" : "off")
+                                    + ",radius=" + FieldVisualizationManager.getRadius(playerId)
+                                    + ",points=" + onOff(style.showPoints())
+                                    + ",lines=" + onOff(style.showLines())
+                                    + ",faces=" + onOff(style.showFaces())
+                                    + ",name=" + onOff(style.showName())
+                                    + ",axes=" + onOff(style.showAxes()));
+                        }))
+                .then(Commands.literal("radius")
+                        .then(Commands.argument("value", IntegerArgumentType.integer(8, 256))
+                                .executes(context -> {
+                                    if (context.getSource().getPlayer() == null) {
+                                        return reply(context.getSource(), "projection=visualize:player_only");
+                                    }
+                                    var playerId = context.getSource().getPlayer().getUUID();
+                                    int value = IntegerArgumentType.getInteger(context, "value");
+                                    FieldVisualizationManager.setRadius(playerId, value);
+                                    return reply(context.getSource(), "projection=visualize:radius=" + FieldVisualizationManager.getRadius(playerId));
+                                })))
+                .then(Commands.literal("show")
+                        .then(Commands.argument("feature", StringArgumentType.word())
+                                .suggests((context, builder) -> SharedSuggestionProvider.suggest(projectionFeatureSuggestions(), builder))
+                                .then(Commands.argument("enabled", StringArgumentType.word())
+                                        .suggests((context, builder) -> SharedSuggestionProvider.suggest(List.of("on", "off"), builder))
+                                        .executes(context -> {
+                                            if (context.getSource().getPlayer() == null) {
+                                                return reply(context.getSource(), "projection=visualize:player_only");
+                                            }
+                                            var playerId = context.getSource().getPlayer().getUUID();
+                                            ProjectionFeature feature = ProjectionFeature.parse(StringArgumentType.getString(context, "feature"));
+                                            boolean enabled = "on".equalsIgnoreCase(StringArgumentType.getString(context, "enabled"));
+                                            FieldVisualizationManager.setFeature(playerId, feature, enabled);
+                                            return reply(context.getSource(), "projection=visualize:show:" + feature.token() + "=" + onOff(enabled));
+                                        }))))
+        );
+
+        dispatcher.register(root);
+    }
+
+    private static void registerPermissionCrud(CommandDispatcher<CommandSourceStack> dispatcher) {
+        var root = Commands.literal(COMMAND_PREFIX + "permission")
+                .requires(source -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS)));
+
+        root.then(Commands.literal("create")
+                .then(Commands.argument("group", StringArgumentType.word())
+                        .suggests((context, builder) -> SharedSuggestionProvider.suggest(permissionGroupSuggestions(), builder))
+                        .then(permissionActionArgument()
+                                .then(permissionDecisionArgument()
+                                        .executes(context -> {
+                                            String group = normalizeGroupToken(StringArgumentType.getString(context, "group"));
+                                            PermissionAction action = parseAction(StringArgumentType.getString(context, "action"));
+                                            PermissionDecision decision = parseDecision(StringArgumentType.getString(context, "decision"));
+                                            grantGlobalPermission(group, action, decision);
+                                            return reply(context.getSource(), "permission=create:global," + group + "," + action + "=" + decision);
+                                        })))));
+
+        root.then(Commands.literal("set")
+                .then(Commands.literal("global")
+                        .then(Commands.argument("group", StringArgumentType.word())
+                                .suggests((context, builder) -> SharedSuggestionProvider.suggest(permissionGroupSuggestions(), builder))
+                                .then(permissionActionArgument()
+                                        .then(permissionDecisionArgument()
+                                                .executes(context -> {
+                                                    String group = normalizeGroupToken(StringArgumentType.getString(context, "group"));
+                                                    PermissionAction action = parseAction(StringArgumentType.getString(context, "action"));
+                                                    PermissionDecision decision = parseDecision(StringArgumentType.getString(context, "decision"));
+                                                    setScopedGroupPermission(ScopeLayer.GLOBAL, Identifier.fromNamespaceAndPath(Myulib.MOD_ID, "global"), group, action, decision);
+                                                    return reply(context.getSource(), "permission=set:global," + group + "," + action + "=" + decision);
+                                                })))))
+                .then(Commands.argument("scope", StringArgumentType.word())
+                        .suggests((context, builder) -> SharedSuggestionProvider.suggest(scopeNamesForScopedSet(), builder))
+                        .then(Commands.argument("scopeId", StringArgumentType.word())
+                                .suggests((context, builder) -> SharedSuggestionProvider.suggest(scopeIdSuggestions(StringArgumentType.getString(context, "scope")), builder))
+                                .then(Commands.argument("group", StringArgumentType.word())
+                                        .suggests((context, builder) -> SharedSuggestionProvider.suggest(permissionGroupSuggestions(), builder))
+                                        .then(permissionActionArgument()
+                                                .then(permissionDecisionArgument()
+                                                        .executes(context -> {
+                                                            ScopeLayer scope = parseScope(StringArgumentType.getString(context, "scope"));
+                                                            Identifier scopeId = resolveScopeId(scope, StringArgumentType.getString(context, "scopeId"));
+                                                            String group = normalizeGroupToken(StringArgumentType.getString(context, "group"));
+                                                            PermissionAction action = parseAction(StringArgumentType.getString(context, "action"));
+                                                            PermissionDecision decision = parseDecision(StringArgumentType.getString(context, "decision"));
+                                                            setScopedGroupPermission(scope, scopeId, group, action, decision);
+                                                            return reply(context.getSource(), "permission=set:" + scope.name().toLowerCase() + "," + group + "," + action + "=" + decision);
+                                                        })))))));
+
+        root.then(Commands.literal("read")
+                .then(Commands.argument("group", StringArgumentType.word())
+                        .suggests((context, builder) -> SharedSuggestionProvider.suggest(permissionGroupSuggestions(), builder))
+                        .then(permissionActionArgument()
+                                .executes(context -> {
+                                    String group = normalizeGroupToken(StringArgumentType.getString(context, "group"));
+                                    PermissionAction action = parseAction(StringArgumentType.getString(context, "action"));
+                                    PermissionDecision decision = PermissionManager.global().forGroup(group).get(action);
+                                    return reply(context.getSource(), "permission=read:global," + group + "," + action + "=" + decision);
+                                }))));
+
+        root.then(Commands.literal("player")
+                .then(Commands.argument("player", EntityArgument.player())
+                        .executes(context -> {
+                            var player = EntityArgument.getPlayer(context, "player");
+                            var groups = RoleGroupManager.getSortedGroupIdsOf(player.getUUID());
+                            Identifier dimId = player.level().dimension().identifier();
+                            Identifier fieldId = FieldManager.findAt(dimId, player.position()).map(FieldDefinition::id).orElse(null);
+                            return reply(context.getSource(), renderFlattenedPlayerPermissions(player.getName().getString(), player.getUUID(), groups, fieldId, dimId));
+                        })));
+
+        root.then(Commands.literal("list")
+                .then(Commands.argument("group", StringArgumentType.word())
+                        .suggests((context, builder) -> SharedSuggestionProvider.suggest(permissionGroupSuggestions(), builder))
+                        .executes(context -> {
+                            String group = normalizeGroupToken(StringArgumentType.getString(context, "group"));
+                            return reply(context.getSource(), renderPermissionGroupList(group, ScopeLayer.GLOBAL, null, "scope"));
+                        })
+                        .then(Commands.argument("scope", StringArgumentType.word())
+                                .suggests((context, builder) -> SharedSuggestionProvider.suggest(scopeNames(), builder))
+                                .then(Commands.argument("scopeId", StringArgumentType.word())
+                                        .suggests((context, builder) -> SharedSuggestionProvider.suggest(scopeIdSuggestions(StringArgumentType.getString(context, "scope")), builder))
+                                        .then(Commands.argument("mode", StringArgumentType.word())
+                                                .suggests((context, builder) -> SharedSuggestionProvider.suggest(List.of("scope", "merged"), builder))
+                                                .executes(context -> {
+                                                    String group = normalizeGroupToken(StringArgumentType.getString(context, "group"));
+                                                    ScopeLayer scope = parseScope(StringArgumentType.getString(context, "scope"));
+                                                    Identifier scopeId = resolveScopeId(scope, StringArgumentType.getString(context, "scopeId"));
+                                                    String mode = StringArgumentType.getString(context, "mode").toLowerCase();
+                                                    return reply(context.getSource(), renderPermissionGroupList(group, scope, scopeId, mode));
+                                                }))))));
+
+        root.then(Commands.literal("delete")
+                .then(Commands.argument("group", StringArgumentType.word())
+                        .suggests((context, builder) -> SharedSuggestionProvider.suggest(permissionGroupSuggestions(), builder))
+                        .then(permissionActionArgument()
+                                .executes(context -> {
+                                    String group = normalizeGroupToken(StringArgumentType.getString(context, "group"));
+                                    PermissionAction action = parseAction(StringArgumentType.getString(context, "action"));
+                                    grantGlobalPermission(group, action, PermissionDecision.UNSET);
+                                    return reply(context.getSource(), "permission=deleted:global," + group + "," + action);
+                                }))));
+
+        dispatcher.register(root);
+    }
+
+    private static void registerRoleGroupCrud(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal(COMMAND_PREFIX + "rolegroup")
+                .requires(source -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS)))
+                .then(Commands.literal("create")
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .then(Commands.argument("priority", IntegerArgumentType.integer())
+                                        .executes(context -> {
+                                            Identifier id = toMyulibIdentifier(StringArgumentType.getString(context, "id"));
+                                            int priority = IntegerArgumentType.getInteger(context, "priority");
+                                            createRoleGroup(id, Component.literal(id.toString()), priority);
+                                            return reply(context.getSource(), "rolegroup=create:" + id);
+                                        }))))
+                .then(Commands.literal("read")
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .suggests((context, builder) -> SharedSuggestionProvider.suggest(rolegroupIdSuggestions(), builder))
+                                .executes(context -> {
+                                    Identifier id = resolveRoleGroupIdToken(StringArgumentType.getString(context, "id"));
+                                    RoleGroupDefinition group = RoleGroupManager.get(id);
+                                    if (group == null) {
+                                        return reply(context.getSource(), "rolegroup=not_found");
+                                    }
+                                    return reply(context.getSource(), "rolegroup=id:" + group.id() + ",priority:" + group.priority());
+                                })))
+                .then(Commands.literal("update")
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .suggests((context, builder) -> SharedSuggestionProvider.suggest(rolegroupIdSuggestions(), builder))
+                                .then(Commands.argument("priority", IntegerArgumentType.integer())
+                                        .executes(context -> {
+                                            Identifier id = resolveRoleGroupIdToken(StringArgumentType.getString(context, "id"));
+                                            if (RoleGroupManager.get(id) == null) {
+                                                return reply(context.getSource(), "rolegroup=not_found");
+                                            }
+                                            int priority = IntegerArgumentType.getInteger(context, "priority");
+                                            RoleGroupManager.update(id, old -> new RoleGroupDefinition(old.id(), old.translationKey(), priority, old.metadata(), old.members()));
+                                            return reply(context.getSource(), "rolegroup=updated:" + id);
+                                        }))))
+                .then(Commands.literal("delete")
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .suggests((context, builder) -> SharedSuggestionProvider.suggest(rolegroupIdSuggestions(), builder))
+                                .executes(context -> {
+                                    Identifier id = resolveRoleGroupIdToken(StringArgumentType.getString(context, "id"));
+                                    if (RoleGroupManager.get(id) == null) {
+                                        return reply(context.getSource(), "rolegroup=not_found");
+                                    }
+                                    deleteRoleGroup(id);
+                                    return reply(context.getSource(), "rolegroup=deleted:" + id);
+                                })))
+                .then(Commands.literal("assign")
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .suggests((context, builder) -> SharedSuggestionProvider.suggest(rolegroupIdSuggestions(), builder))
+                                .then(Commands.argument("player", EntityArgument.player())
+                                        .executes(context -> {
+                                            Identifier id = resolveRoleGroupIdToken(StringArgumentType.getString(context, "id"));
+                                            if (RoleGroupManager.get(id) == null) {
+                                                return reply(context.getSource(), "rolegroup=not_found");
+                                            }
+                                            var target = EntityArgument.getPlayer(context, "player");
+                                            boolean added = RoleGroupManager.assign(target.getUUID(), id);
+                                            return reply(context.getSource(), added
+                                                    ? "rolegroup=assigned:" + id + "->" + target.getName().getString()
+                                                    : "rolegroup=already_assigned");
+                                        }))))
+                .then(Commands.literal("revoke")
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .suggests((context, builder) -> SharedSuggestionProvider.suggest(rolegroupIdSuggestions(), builder))
+                                .then(Commands.argument("player", EntityArgument.player())
+                                        .executes(context -> {
+                                            Identifier id = resolveRoleGroupIdToken(StringArgumentType.getString(context, "id"));
+                                            if (RoleGroupManager.get(id) == null) {
+                                                return reply(context.getSource(), "rolegroup=not_found");
+                                            }
+                                            var target = EntityArgument.getPlayer(context, "player");
+                                            boolean removed = RoleGroupManager.revoke(target.getUUID(), id);
+                                            return reply(context.getSource(), removed
+                                                    ? "rolegroup=revoked:" + id + "->" + target.getName().getString()
+                                                    : "rolegroup=not_assigned");
+                                        }))))
+                .then(Commands.literal("groups-of")
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .executes(context -> {
+                                    var target = EntityArgument.getPlayer(context, "player");
+                                    List<String> groups = RoleGroupManager.getSortedGroupIdsOf(target.getUUID());
+                                    return reply(context.getSource(), "rolegroup=groups_of:" + target.getName().getString() + "=" + String.join("|", groups));
+                                })))
+                .then(Commands.literal("list")
+                        .executes(context -> reply(context.getSource(), "rolegroup=count:" + RoleGroupManager.groups().size()))));
+    }
+
+    private static void registerTeamCrud(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal(COMMAND_PREFIX + "team")
+                .requires(source -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS)))
+                .then(Commands.literal("create")
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .then(Commands.argument("color", StringArgumentType.word())
+                                        .executes(context -> {
+                                            Identifier id = Identifier.parse(StringArgumentType.getString(context, "id"));
+                                            TeamColor color = parseTeamColor(StringArgumentType.getString(context, "color"));
+                                            TeamManager.register(new TeamDefinition(id, Component.literal(id.toString()), color, Map.of()));
+                                            return reply(context.getSource(), "team=create:" + id);
+                                        }))))
+                .then(Commands.literal("read")
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .executes(context -> {
+                                    Identifier id = resolveTeamIdToken(StringArgumentType.getString(context, "id"));
+                                    TeamDefinition team = id == null ? null : TeamManager.get(id);
+                                    if (team == null) {
+                                        return reply(context.getSource(), "team=not_found");
+                                    }
+                                    return reply(context.getSource(), "team=id:" + team.id() + ",color:" + team.color());
+                                })))
+                .then(Commands.literal("update")
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .then(Commands.argument("color", StringArgumentType.word())
+                                        .executes(context -> {
+                                            Identifier id = resolveTeamIdToken(StringArgumentType.getString(context, "id"));
+                                            if (id == null || TeamManager.get(id) == null) {
+                                                return reply(context.getSource(), "team=not_found");
+                                            }
+                                            TeamColor color = parseTeamColor(StringArgumentType.getString(context, "color"));
+                                            TeamManager.update(id, old -> new TeamDefinition(old.id(), old.translationKey(), color, old.flags()));
+                                            return reply(context.getSource(), "team=updated:" + id);
+                                        }))))
+                .then(Commands.literal("delete")
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .executes(context -> {
+                                    Identifier id = resolveTeamIdToken(StringArgumentType.getString(context, "id"));
+                                    if (id == null || TeamManager.get(id) == null) {
+                                        return reply(context.getSource(), "team=not_found");
+                                    }
+                                    TeamManager.unregister(id);
+                                    return reply(context.getSource(), "team=deleted:" + id);
+                                })))
+                .then(Commands.literal("list")
+                        .executes(context -> reply(context.getSource(), "team=count:" + TeamManager.all().size()))));
+    }
+
+    private static void registerGameCrud(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal(COMMAND_PREFIX + "game")
+                .requires(source -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS)))
+                .then(Commands.literal("create")
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .executes(context -> {
+                                    Identifier id = Identifier.parse(StringArgumentType.getString(context, "id"));
+                                    if (!GameManager.hasDefinition(id)) {
+                                        return reply(context.getSource(), "game=missing_definition:" + id);
+                                    }
+                                    try {
+                                        GameInstance<?, ?, ?> instance = GameManager.createInstance(id, GameConfig.empty());
+                                        return reply(context.getSource(), "game=create_instance:" + instance.getInstanceId());
+                                    } catch (Exception ex) {
+                                        return reply(context.getSource(), "game=create_failed:" + ex.getClass().getSimpleName());
+                                    }
+                                })))
+                .then(Commands.literal("read")
+                        .then(Commands.argument("instanceId", IntegerArgumentType.integer(1))
+                                .executes(context -> {
+                                    int instanceId = IntegerArgumentType.getInteger(context, "instanceId");
+                                    GameInstance<?, ?, ?> instance = GameManager.getInstance(instanceId);
+                                    if (instance == null) {
+                                        return reply(context.getSource(), "game=not_found");
+                                    }
+                                    return reply(context.getSource(), "game=instance:" + instanceId + ",enabled:" + instance.isEnabled());
+                                })))
+                .then(Commands.literal("update")
+                        .then(Commands.argument("instanceId", IntegerArgumentType.integer(1))
+                                .executes(context -> {
+                                    int instanceId = IntegerArgumentType.getInteger(context, "instanceId");
+                                    GameInstance<?, ?, ?> instance = GameManager.getInstance(instanceId);
+                                    if (instance == null) {
+                                        return reply(context.getSource(), "game=not_found");
+                                    }
+                                    instance.resetState();
+                                    return reply(context.getSource(), "game=updated:" + instanceId);
+                                })))
+                .then(Commands.literal("delete")
+                        .then(Commands.argument("instanceId", IntegerArgumentType.integer(1))
+                                .executes(context -> {
+                                    int instanceId = IntegerArgumentType.getInteger(context, "instanceId");
+                                    boolean removed = GameManager.destroyInstance(instanceId);
+                                    return reply(context.getSource(), removed ? "game=deleted:" + instanceId : "game=not_found");
+                                })))
+                .then(Commands.literal("list")
+                        .executes(context -> reply(context.getSource(), "game=instance_count:" + GameManager.getInstances().size()))));
+    }
+
+    private static void registerTimerCrud(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal(COMMAND_PREFIX + "timer")
+                .requires(source -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS)))
+                .then(Commands.literal("create")
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .then(Commands.argument("ticks", LongArgumentType.longArg(1L))
+                                        .executes(context -> {
+                                            Identifier id = Identifier.parse(StringArgumentType.getString(context, "id"));
+                                            long ticks = LongArgumentType.getLong(context, "ticks");
+                                            TimerManager.register(new TimerDefinition(id, ticks));
+                                            TRACKED_TIMERS.add(id);
+                                            return reply(context.getSource(), "timer=create:" + id);
+                                        }))))
+                .then(Commands.literal("read")
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .executes(context -> {
+                                    Identifier id = Identifier.parse(StringArgumentType.getString(context, "id"));
+                                    return reply(context.getSource(), "timer=exists:" + TimerManager.has(id));
+                                })))
+                .then(Commands.literal("update")
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .then(Commands.argument("ticks", LongArgumentType.longArg(1L))
+                                        .executes(context -> {
+                                            Identifier id = Identifier.parse(StringArgumentType.getString(context, "id"));
+                                            long ticks = LongArgumentType.getLong(context, "ticks");
+                                            if (!TimerManager.has(id)) {
+                                                return reply(context.getSource(), "timer=not_found");
+                                            }
+                                            TimerManager.unregister(id);
+                                            TimerManager.register(new TimerDefinition(id, ticks));
+                                            TRACKED_TIMERS.add(id);
+                                            return reply(context.getSource(), "timer=updated:" + id);
+                                        }))))
+                .then(Commands.literal("delete")
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .executes(context -> {
+                                    Identifier id = Identifier.parse(StringArgumentType.getString(context, "id"));
+                                    boolean removed = TimerManager.unregister(id) != null;
+                                    TRACKED_TIMERS.remove(id);
+                                    return reply(context.getSource(), removed ? "timer=deleted:" + id : "timer=not_found");
+                                })))
+                .then(Commands.literal("list")
+                        .executes(context -> reply(context.getSource(), "timer=definition_count:" + TimerManager.timerDefinitionCount() + ",tracked:" + TRACKED_TIMERS.size()))));
+    }
+
+    private static PermissionAction parseAction(String raw) {
+        return PermissionAction.valueOf(raw.toUpperCase());
+    }
+
+    private static PermissionDecision parseDecision(String raw) {
+        return PermissionDecision.valueOf(raw.toUpperCase());
+    }
+
+    private static TeamColor parseTeamColor(String raw) {
+        return TeamColor.valueOf(raw.toUpperCase());
+    }
+
+    private static Identifier resolveFieldIdToken(String token) {
+        Identifier fromShort = FieldManager.resolveShortId(token);
+        return fromShort != null ? fromShort : Identifier.parse(token);
+    }
+
+    private static Identifier resolveRoleGroupIdToken(String token) {
+        Identifier fromShort = RoleGroupManager.resolveShortId(token);
+        if (fromShort != null) {
+            return fromShort;
+        }
+        return toMyulibIdentifier(token);
+    }
+
+    private static Identifier resolveTeamIdToken(String token) {
+        Identifier fromShort = TeamManager.resolveShortId(token);
+        return fromShort != null ? fromShort : Identifier.parse(token);
+    }
+
+    private static String saveAll() {
+        PermissionManager.save();
+        FieldManager.save();
+        RoleGroupManager.save();
+        return "permission,field,rolegroup";
+    }
+
+    private static String buildStatusLine() {
+        return "field=" + FieldManager.all().size()
+                + ",rolegroup=" + RoleGroupManager.groups().size()
+                + ",team=" + TeamManager.all().size()
+                + ",game_instance=" + GameManager.getInstances().size()
+                + ",timer=" + TimerManager.timerDefinitionCount() + ",timer_instance=" + TimerManager.timerInstanceCount()
+                + ",control_bindings=" + ControlManager.controlledCount();
+    }
+
+    private static int reply(CommandSourceStack source, String message) {
+        source.sendSuccess(() -> Component.literal(message), true);
+        DebugLogManager.log(DebugFeature.COMMAND,
+                "source=" + source.getTextName() + ",message=" + message.replace('\n', '|'));
+        return 1;
+    }
+
+    // --- Service Layer helpers ---
+    public static void createRoleGroup(Identifier groupId, MutableComponent displayName, int priority) {
+        Identifier normalized = toMyulibIdentifier(groupId == null ? "" : groupId.toString());
+        RoleGroupDefinition group = new RoleGroupDefinition(normalized, displayName, priority, Map.of(), Set.of());
+        RoleGroupManager.register(group);
+        RoleGroupManager.save();
+    }
+
+    public static void deleteRoleGroup(Identifier groupId) {
         RoleGroupManager.delete(groupId);
-        RoleGroupManager.save(); // 💡 刪除資料後觸發存檔
+        RoleGroupManager.save();
     }
 
     public static List<RoleGroupDefinition> listRoleGroups() {
         return RoleGroupManager.groups();
     }
 
-    // --- Permission (權限) ---
     public static void grantGlobalPermission(String groupId, PermissionAction action, PermissionDecision decision) {
-        PermissionManager.global().forGroup(groupId).set(action, decision);
+        String normalized = PermissionManager.normalizeGroupName(groupId);
+        PermissionManager.global().forGroup(normalized).set(action, decision);
         PermissionManager.save();
     }
 
-    // --- Field (保護區) ---
     public static void createField(FieldDefinition field) {
         FieldManager.register(field);
-        // FieldManager 內部的 NbtFieldStorage 在 add() 時預設已經會 markDirty()
-        // 但安全起見可以統一呼叫，不會有額外效能負擔
         FieldManager.save();
     }
 
     public static void deleteField(Identifier fieldId) {
         FieldManager.unregister(fieldId);
         FieldManager.save();
+    }
+
+    private static List<String> permissionActionNames() {
+        return java.util.Arrays.stream(PermissionAction.values()).map(Enum::name).toList();
+    }
+
+    private static List<String> permissionDecisionNames() {
+        return java.util.Arrays.stream(PermissionDecision.values()).map(Enum::name).toList();
+    }
+
+    private static ScopeLayer parseScope(String raw) {
+        return ScopeLayer.valueOf(raw.toUpperCase());
+    }
+
+    private static Identifier resolveScopeId(ScopeLayer scope, String token) {
+        return switch (scope) {
+            case FIELD -> {
+                Identifier fieldId = PermissionManager.resolveFieldShortId(token);
+                yield fieldId != null ? fieldId : Identifier.parse(token);
+            }
+            case DIMENSION -> {
+                Identifier dimId = PermissionManager.resolveDimensionShortId(token);
+                yield dimId != null ? dimId : Identifier.parse(token);
+            }
+            case GLOBAL -> Identifier.fromNamespaceAndPath(Myulib.MOD_ID, "global");
+            case USER -> Identifier.fromNamespaceAndPath(Myulib.MOD_ID, "user");
+        };
+    }
+
+    private static void setScopedGroupPermission(ScopeLayer scope, Identifier scopeId, String group, PermissionAction action, PermissionDecision decision) {
+        String normalized = PermissionManager.normalizeGroupName(group);
+        switch (scope) {
+            case GLOBAL -> PermissionManager.global().forGroup(normalized).set(action, decision);
+            case DIMENSION -> PermissionManager.dimension(scopeId).forGroup(normalized).set(action, decision);
+            case FIELD -> PermissionManager.field(scopeId).forGroup(normalized).set(action, decision);
+        }
+        PermissionManager.save();
+    }
+
+    private static String renderPermissionGroupList(String group, ScopeLayer scope, Identifier scopeId, String mode) {
+        String normalized = PermissionManager.normalizeGroupName(group);
+        StringBuilder builder = new StringBuilder();
+        builder.append("permission=list\n");
+        builder.append("group=").append(normalized)
+                .append("\nscope=").append(scope.name().toLowerCase())
+                .append("\nid=").append(scopeId == null ? "-" : scopeId.toString())
+                .append("\nmode=").append(mode)
+                .append("\n");
+        for (PermissionAction action : PermissionAction.values()) {
+            PermissionDecision decision;
+            if ("merged".equalsIgnoreCase(mode)) {
+                Identifier fieldId = scope == ScopeLayer.FIELD ? scopeId : null;
+                Identifier dimId = scope == ScopeLayer.FIELD ? fieldDimensionOf(scopeId) : (scope == ScopeLayer.DIMENSION ? scopeId : null);
+                decision = PermissionManager.resolveGroupMerged(normalized, action, fieldId, dimId);
+            } else {
+                decision = PermissionManager.resolveGroupInScope(normalized, action, scope, scopeId);
+            }
+            builder.append(action.name()).append("=").append(decision.name()).append("\n");
+        }
+        return builder.toString().trim();
+    }
+
+    private static Identifier fieldDimensionOf(Identifier fieldId) {
+        var field = fieldId == null ? null : FieldManager.get(fieldId);
+        return field == null ? null : field.dimensionId();
+    }
+
+    private static String normalizeGroupToken(String token) {
+        return PermissionManager.normalizeGroupName(token);
+    }
+
+    private static AABB cuboidFromCorners(double x1, double y1, double z1, double x2, double y2, double z2) {
+        return new AABB(
+                Math.min(x1, x2),
+                Math.min(y1, y2),
+                Math.min(z1, z2),
+                Math.max(x1, x2),
+                Math.max(y1, y2),
+                Math.max(z1, z2)
+        );
+    }
+
+    private static List<String> scopeNames() {
+        return List.of("global", "dimension", "field");
+    }
+
+    private static List<String> scopeNamesForScopedSet() {
+        return List.of("dimension", "field");
+    }
+
+    private static List<String> fieldModeSuggestions() {
+        return List.of("edges-only", "full", "labels-only");
+    }
+
+    private static List<String> projectionFeatureSuggestions() {
+        return java.util.Arrays.stream(ProjectionFeature.values()).map(ProjectionFeature::token).toList();
+    }
+
+    private static List<String> projectionIdSuggestions() {
+        java.util.Set<String> suggestions = new java.util.LinkedHashSet<>();
+        for (Identifier id : ProjectionManager.all().keySet()) {
+            suggestions.add(id.toString());
+            suggestions.add(id.getPath());
+        }
+        return List.copyOf(suggestions);
+    }
+
+    private static Identifier resolveProjectionIdToken(String token) {
+        if (token == null || token.isBlank()) {
+            return null;
+        }
+        if (!token.contains(":")) {
+            Identifier candidate = Identifier.fromNamespaceAndPath(Myulib.MOD_ID, token);
+            if (ProjectionManager.get(candidate) != null) {
+                return candidate;
+            }
+        }
+        return Identifier.parse(token);
+    }
+
+    private static String onOff(boolean value) {
+        return value ? "on" : "off";
+    }
+
+    private static com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSourceStack, String> permissionActionArgument() {
+        return Commands.argument("action", StringArgumentType.word())
+                .suggests((context, builder) -> SharedSuggestionProvider.suggest(permissionActionNames(), builder));
+    }
+
+    private static com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSourceStack, String> permissionDecisionArgument() {
+        return Commands.argument("decision", StringArgumentType.word())
+                .suggests((context, builder) -> SharedSuggestionProvider.suggest(permissionDecisionNames(), builder));
+    }
+
+    private static List<String> rolegroupIdSuggestions() {
+        java.util.Set<String> suggestions = new java.util.LinkedHashSet<>();
+        for (RoleGroupDefinition group : RoleGroupManager.groups()) {
+            suggestions.add(group.id().toString());
+            suggestions.add(group.id().getPath());
+            String shortId = RoleGroupManager.getShortIdOf(group.id());
+            if (shortId != null && !shortId.isBlank()) {
+                suggestions.add(shortId);
+            }
+        }
+        return List.copyOf(suggestions);
+    }
+
+    private static List<String> fieldIdSuggestions() {
+        java.util.Set<String> suggestions = new java.util.LinkedHashSet<>();
+        for (Identifier id : FieldManager.all().keySet()) {
+            suggestions.add(id.toString());
+            String shortId = FieldManager.getShortIdOf(id);
+            if (shortId != null && !shortId.isBlank()) {
+                suggestions.add(shortId);
+            }
+        }
+        return List.copyOf(suggestions);
+    }
+
+    private static List<String> debugFeatureSuggestions() {
+        return java.util.Arrays.stream(DebugFeature.values()).map(DebugFeature::token).toList();
+    }
+
+    private static List<String> permissionGroupSuggestions() {
+        java.util.Set<String> suggestions = new java.util.LinkedHashSet<>();
+        suggestions.add("everyone");
+
+        for (RoleGroupDefinition group : RoleGroupManager.groups()) {
+            suggestions.add(group.id().toString());
+            suggestions.add(PermissionManager.normalizeGroupName(group.id().toString()));
+        }
+
+        suggestions.addAll(PermissionManager.knownGroupNames());
+        return List.copyOf(suggestions);
+    }
+
+    private static List<String> scopeIdSuggestions(String scopeRaw) {
+        java.util.Set<String> suggestions = new java.util.LinkedHashSet<>();
+        ScopeLayer scope;
+        try {
+            scope = parseScope(scopeRaw);
+        } catch (Exception ignored) {
+            return List.of();
+        }
+
+        if (scope == ScopeLayer.DIMENSION) {
+            for (FieldDefinition field : FieldManager.all().values()) {
+                suggestions.add(field.dimensionId().toString());
+            }
+            for (Identifier id : PermissionManager.dimensionScopeIds()) {
+                suggestions.add(id.toString());
+                String shortId = PermissionManager.getDimensionShortIdOf(id);
+                if (shortId != null && !shortId.isBlank()) {
+                    suggestions.add(shortId);
+                }
+            }
+        } else if (scope == ScopeLayer.FIELD) {
+            for (Identifier id : FieldManager.all().keySet()) {
+                suggestions.add(id.toString());
+                String fieldShort = FieldManager.getShortIdOf(id);
+                if (fieldShort != null && !fieldShort.isBlank()) {
+                    suggestions.add(fieldShort);
+                }
+            }
+            for (Identifier id : PermissionManager.fieldScopeIds()) {
+                suggestions.add(id.toString());
+                String shortId = PermissionManager.getFieldShortIdOf(id);
+                if (shortId != null && !shortId.isBlank()) {
+                    suggestions.add(shortId);
+                }
+            }
+        } else if (scope == ScopeLayer.GLOBAL) {
+            suggestions.add("global");
+        }
+
+        return List.copyOf(suggestions);
+    }
+
+    private static String renderFlattenedPlayerPermissions(String playerName, java.util.UUID playerId, List<String> groups, Identifier fieldId, Identifier dimensionId) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("permission=player\n")
+                .append("player=").append(playerName)
+                .append("\ngroups=").append(String.join("|", groups))
+                .append("\nfield=").append(fieldId == null ? "-" : fieldId)
+                .append("\ndimension=").append(dimensionId == null ? "-" : dimensionId)
+                .append("\n");
+        for (PermissionAction action : PermissionAction.values()) {
+            PermissionDecision decision = PermissionManager.evaluate(playerId, groups, action, fieldId, dimensionId);
+            builder.append(action.name()).append("=").append(decision.name()).append("\n");
+        }
+        return builder.toString().trim();
+    }
+
+    private static Identifier toMyulibIdentifier(String token) {
+        if (token == null || token.isBlank()) {
+            return Identifier.fromNamespaceAndPath(Myulib.MOD_ID, "everyone");
+        }
+        String value = token.trim();
+        if (!value.contains(":")) {
+            return Identifier.fromNamespaceAndPath(Myulib.MOD_ID, value);
+        }
+        Identifier parsed = Identifier.parse(value);
+        return Identifier.fromNamespaceAndPath(Myulib.MOD_ID, parsed.getPath());
     }
 }

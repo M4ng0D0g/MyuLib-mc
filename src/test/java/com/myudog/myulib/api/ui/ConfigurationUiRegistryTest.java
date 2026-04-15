@@ -1,5 +1,6 @@
 package com.myudog.myulib.api.ui;
 import com.myudog.myulib.api.permission.ScopeLayer;
+import net.minecraft.resources.Identifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
@@ -15,42 +16,42 @@ final class ConfigurationUiRegistryTest {
     void registryForwardsCallsAndNoopBridgeStaysSilent() {
         RecordingBridge bridge = new RecordingBridge();
         ConfigurationUiRegistry.setBridge(bridge);
-        ConfigurationUiRegistry.openFieldEditor("field");
-        ConfigurationUiRegistry.openIdentityGroupEditor("identity");
-        ConfigurationUiRegistry.openRoleGroupEditor("role");
-        ConfigurationUiRegistry.openTeamEditor("team");
+        ConfigurationUiRegistry.openFieldEditor(Identifier.fromNamespaceAndPath("tests", "field"));
+        ConfigurationUiRegistry.openIdentityGroupEditor(Identifier.fromNamespaceAndPath("tests", "identity"));
+        ConfigurationUiRegistry.openRoleGroupEditor(Identifier.fromNamespaceAndPath("tests", "role"));
+        ConfigurationUiRegistry.openTeamEditor(Identifier.fromNamespaceAndPath("tests", "team"));
         ConfigurationUiRegistry.openPermissionEditor(ScopeLayer.FIELD, "scope");
         assertEquals(List.of(
-                "field:field",
-                "identity:identity",
-                "role:role",
-                "team:team",
+                "field:tests:field",
+                "identity:tests:identity",
+                "role:tests:role",
+                "team:tests:team",
                 "permission:FIELD:scope"
         ), bridge.calls, "ConfigurationUiRegistry should forward calls in order");
         assertDoesNotThrow(() -> {
-            NoopConfigurationUiBridge.INSTANCE.openFieldEditor("ignored");
-            NoopConfigurationUiBridge.INSTANCE.openIdentityGroupEditor("ignored");
-            NoopConfigurationUiBridge.INSTANCE.openRoleGroupEditor("ignored");
-            NoopConfigurationUiBridge.INSTANCE.openTeamEditor("ignored");
+            NoopConfigurationUiBridge.INSTANCE.openFieldEditor(Identifier.fromNamespaceAndPath("tests", "ignored_field"));
+            NoopConfigurationUiBridge.INSTANCE.openIdentityGroupEditor(Identifier.fromNamespaceAndPath("tests", "ignored_identity"));
+            NoopConfigurationUiBridge.INSTANCE.openRoleGroupEditor(Identifier.fromNamespaceAndPath("tests", "ignored_role"));
+            NoopConfigurationUiBridge.INSTANCE.openTeamEditor(Identifier.fromNamespaceAndPath("tests", "ignored_team"));
             NoopConfigurationUiBridge.INSTANCE.openPermissionEditor(ScopeLayer.GLOBAL, "ignored");
         }, "NoopConfigurationUiBridge should ignore all calls without throwing");
     }
     private static final class RecordingBridge implements ConfigurationUiBridge {
         private final List<String> calls = new ArrayList<>();
         @Override
-        public void openFieldEditor(String fieldId) {
+        public void openFieldEditor(Identifier fieldId) {
             calls.add("field:" + fieldId);
         }
         @Override
-        public void openIdentityGroupEditor(String groupId) {
+        public void openIdentityGroupEditor(Identifier groupId) {
             calls.add("identity:" + groupId);
         }
         @Override
-        public void openRoleGroupEditor(String groupId) {
+        public void openRoleGroupEditor(Identifier groupId) {
             calls.add("role:" + groupId);
         }
         @Override
-        public void openTeamEditor(String teamId) {
+        public void openTeamEditor(Identifier teamId) {
             calls.add("team:" + teamId);
         }
         @Override

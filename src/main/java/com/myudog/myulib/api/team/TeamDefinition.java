@@ -1,15 +1,17 @@
 package com.myudog.myulib.api.team;
 
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.Identifier;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.Objects;
 
 public record TeamDefinition(
-        String id,
-        MutableComponent translationKey,
-        TeamColor color,
+        @NotNull Identifier id,
+        @NotNull MutableComponent translationKey,
+        @NotNull TeamColor color,
         Map<TeamFlag, Boolean> flags
 ) {
     public TeamDefinition {

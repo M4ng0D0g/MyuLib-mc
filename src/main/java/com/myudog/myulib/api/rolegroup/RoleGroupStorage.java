@@ -1,38 +1,23 @@
 package com.myudog.myulib.api.rolegroup;
 
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 
-import java.nio.file.Path;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.UnaryOperator;
 
 public interface RoleGroupStorage {
-    void bindServer(MinecraftServer server);
-    void bindRoot(Path root);
-    void ensureLoaded();
+    void initialize(MinecraftServer server);
 
-    RoleGroupDefinition register(RoleGroupDefinition group);
-    RoleGroupDefinition update(String groupId, UnaryOperator<RoleGroupDefinition> updater);
-    RoleGroupDefinition remove(String groupId);
-    RoleGroupDefinition get(String groupId);
+    Map<Identifier, RoleGroupDefinition> loadGroups();
 
-    void markDirty();
+    Map<UUID, Set<Identifier>> loadAssignments();
 
-    List<RoleGroupDefinition> all();
+    void saveGroup(RoleGroupDefinition group);
 
-    Map<String, RoleGroupDefinition> snapshot();
+    void deleteGroup(Identifier groupId);
 
-    boolean assign(UUID playerId, String groupId);
-    boolean revoke(UUID playerId, String groupId);
-
-    Set<String> groupIdsOf(UUID playerId);
-    List<RoleGroupDefinition> groupsOf(UUID playerId);
-
-    void clear();
-
-    Set<UUID> getPlayersInGroup(String groupId);
+    void saveAssignments(UUID playerId, Set<Identifier> groupIds);
 }
 

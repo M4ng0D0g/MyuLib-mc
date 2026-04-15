@@ -10,4 +10,4 @@
 - `TimerCheckpointEvent`
 - `TimerCompletedEvent`
 ## Notes
-- Each record wraps a `TimerModels.TimerSnapshot`.
+- Each record wraps a `TimerSnapshot`.

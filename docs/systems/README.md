@@ -1,6 +1,8 @@
 # Systems (legacy)
 This page is kept for backward compatibility.
 ## Canonical docs
+- `docs/camera/index.md`
+- `docs/control/index.md`
 - `docs/ui/index.md`
 - `docs/animation/index.md`
 - `docs/game/index.md`

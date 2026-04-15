@@ -4,27 +4,27 @@ public final class TimerEvents {
     private TimerEvents() {
     }
 
-    public record TimerStartedEvent(TimerModels.TimerSnapshot snapshot) {
+    public record TimerStartedEvent(TimerSnapshot snapshot) {
     }
 
-    public record TimerPausedEvent(TimerModels.TimerSnapshot snapshot) {
+    public record TimerPausedEvent(TimerSnapshot snapshot) {
     }
 
-    public record TimerResumedEvent(TimerModels.TimerSnapshot snapshot) {
+    public record TimerResumedEvent(TimerSnapshot snapshot) {
     }
 
-    public record TimerResetEvent(TimerModels.TimerSnapshot snapshot) {
+    public record TimerResetEvent(TimerSnapshot snapshot) {
     }
 
-    public record TimerStoppedEvent(TimerModels.TimerSnapshot snapshot) {
+    public record TimerStoppedEvent(TimerSnapshot snapshot) {
     }
 
-    public record TimerTickEvent(TimerModels.TimerSnapshot snapshot) {
+    public record TimerTickEvent(TimerSnapshot snapshot) {
     }
 
-    public record TimerCheckpointEvent(TimerModels.TimerSnapshot snapshot, int bindingId, TimerModels.TimerTickBasis basis, long tick) {
+    public record TimerCheckpointEvent(TimerSnapshot snapshot, int bindingId, TimerTickBasis basis, long tick) {
     }
 
-    public record TimerCompletedEvent(TimerModels.TimerSnapshot snapshot) {
+    public record TimerCompletedEvent(TimerSnapshot snapshot) {
     }
 }

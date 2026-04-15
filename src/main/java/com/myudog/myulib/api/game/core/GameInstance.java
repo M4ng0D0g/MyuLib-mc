@@ -1,5 +1,7 @@
 package com.myudog.myulib.api.game.core;
 
+import com.myudog.myulib.api.debug.DebugFeature;
+import com.myudog.myulib.api.debug.DebugLogManager;
 import com.myudog.myulib.api.game.state.GameState;
 import com.myudog.myulib.api.game.state.GameStateMachine;
 import com.myudog.myulib.api.game.state.GameStateChangeEvent; // 假設的事件類別
@@ -40,6 +42,11 @@ public class GameInstance<C extends GameConfig, D extends GameData, S extends Ga
         this.data = Objects.requireNonNull(data, "data 不得為空");
         this.stateMachine = Objects.requireNonNull(stateMachine, "stateMachine 不得為空");
         this.eventBus = Objects.requireNonNull(eventBus, "eventBus 不得為空");
+
+        S current = this.stateMachine.getCurrent();
+        if (current != null) {
+            current.onEnter(this);
+        }
     }
 
     // --- Getters ---
@@ -73,8 +80,14 @@ public class GameInstance<C extends GameConfig, D extends GameData, S extends Ga
 
         S from = stateMachine.getCurrent();
         if (stateMachine.transitionTo(to)) {
+            if (from != null) {
+                from.onExit(this);
+            }
+            to.onEnter(this);
             // 🌟 修正：發送狀態變更事件，讓 bindBehaviors 和 IGameEntity 能夠響應
             eventBus.dispatch(new GameStateChangeEvent<>(this, from, to));
+            DebugLogManager.log(DebugFeature.GAME,
+                    "transition instance=" + instanceId + ",from=" + (from == null ? "-" : from) + ",to=" + to);
             return true;
         }
         return false;
@@ -88,15 +101,31 @@ public class GameInstance<C extends GameConfig, D extends GameData, S extends Ga
 
         S from = stateMachine.getCurrent();
         // 🌟 修正：使用狀態機的強制切換方法
+        if (from != null) {
+            from.onExit(this);
+        }
         stateMachine.forceTransition(to);
+        to.onEnter(this);
         eventBus.dispatch(new GameStateChangeEvent<>(this, from, to));
+        DebugLogManager.log(DebugFeature.GAME,
+                "transition-unsafe instance=" + instanceId + ",from=" + (from == null ? "-" : from) + ",to=" + to);
         return true;
     }
 
     public void resetState() {
+        S from = stateMachine.getCurrent();
+        if (from != null) {
+            from.onExit(this);
+        }
         stateMachine.reset();
+        S current = stateMachine.getCurrent();
+        if (current != null) {
+            current.onEnter(this);
+        }
         // 重置狀態後通常也需要發送事件通知系統
-        eventBus.dispatch(new GameStateChangeEvent<>(this, null, stateMachine.getCurrent()));
+        eventBus.dispatch(new GameStateChangeEvent<>(this, from, stateMachine.getCurrent()));
+        DebugLogManager.log(DebugFeature.GAME,
+                "reset-state instance=" + instanceId + ",from=" + (from == null ? "-" : from) + ",to=" + stateMachine.getCurrent());
     }
 
     // --- 生命週期 ---
@@ -104,14 +133,23 @@ public class GameInstance<C extends GameConfig, D extends GameData, S extends Ga
     public void tick() {
         if (!enabled) return;
         tickCount++;
+        S current = stateMachine.getCurrent();
+        if (current != null) {
+            current.onTick(this, tickCount);
+        }
     }
 
     public void destroy() {
         if (!enabled) return;
+        S current = stateMachine.getCurrent();
+        if (current != null) {
+            current.onExit(this);
+        }
         this.enabled = false;
 
         // 🌟 修正：清理資料，防止實體或資料殘留
         this.data.reset();
+        DebugLogManager.log(DebugFeature.GAME, "destroy instance=" + instanceId);
 
         // 如果您的 EventDispatcherImpl 支援清理所有監聽器，建議在此呼叫
         // this.eventBus.clearListeners();

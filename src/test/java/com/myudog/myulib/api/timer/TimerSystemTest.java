@@ -24,7 +24,7 @@ final class TimerSystemTest {
         AtomicInteger elapsed = new AtomicInteger();
         AtomicInteger remaining = new AtomicInteger();
         AtomicInteger completed = new AtomicInteger();
-        TimerModels.Timer timer = new TimerModels.Timer(timerId, 3L, TimerModels.TimerMode.COUNT_DOWN, true)
+        TimerDefinition timer = new TimerDefinition(timerId, 3L, TimerMode.COUNT_DOWN, true)
                 .onStarted(snapshot -> started.incrementAndGet())
                 .onElapsedTick(1L, snapshot -> elapsed.incrementAndGet())
                 .onRemainingTick(2L, snapshot -> remaining.incrementAndGet())
@@ -33,13 +33,13 @@ final class TimerSystemTest {
         int instanceId = TimerManager.createInstance(
                 timerId,
                 42L,
-                new TimerModels.RespawnTimerPayload(UUID.fromString("00000000-0000-0000-0000-000000000999"), true),
+                new RespawnTimerPayload(UUID.fromString("00000000-0000-0000-0000-000000000999"), true),
                 true,
                 null
         );
         assertTrue(TimerManager.isRunning(instanceId, null), "Auto-started timer should be running immediately after creation");
-        TimerModels.TimerSnapshot snapshot = TimerManager.getSnapshot(instanceId);
-        assertEquals(TimerModels.TimerStatus.RUNNING, snapshot.status(), "Created timer should start in the RUNNING state");
+        TimerSnapshot snapshot = TimerManager.getSnapshot(instanceId);
+        assertEquals(TimerStatus.RUNNING, snapshot.status(), "Created timer should start in the RUNNING state");
         assertEquals(0L, snapshot.elapsedTicks(), "Timer should start with zero elapsed ticks");
         assertEquals(3L, snapshot.remainingTicks(), "Timer should start with full remaining ticks");
         assertEquals(0.0d, snapshot.progress(), 1.0e-9, "Timer progress should start at zero");
@@ -54,17 +54,17 @@ final class TimerSystemTest {
         TimerManager.update(null);
         assertEquals(1, completed.get(), "Completion action should fire exactly once");
         assertTrue(TimerManager.isStopped(instanceId, null), "Auto-stop should leave the timer in STOPPED state");
-        assertEquals(TimerModels.TimerStatus.STOPPED, TimerManager.getInstance(instanceId, null).status,
+        assertEquals(TimerStatus.STOPPED, TimerManager.getInstance(instanceId, null).status,
                 "The underlying timer instance should be marked STOPPED after auto-stop-on-complete");
     }
     @Test
     void timerMutatorsAndPayloadValidationWork() {
         Identifier timerId = Identifier.fromNamespaceAndPath("tests", "cooldown");
-        TimerModels.RespawnTimerPayload payload = new TimerModels.RespawnTimerPayload(
+        RespawnTimerPayload payload = new RespawnTimerPayload(
                 UUID.fromString("00000000-0000-0000-0000-000000000555"),
                 false
         );
-        TimerModels.Timer timer = new TimerModels.Timer(timerId, 10L, TimerModels.TimerMode.COUNT_UP, false);
+        TimerDefinition timer = new TimerDefinition(timerId, 10L, TimerMode.COUNT_UP, false);
         TimerManager.register(timer);
         int instanceId = TimerManager.createInstance(timerId, 99L, payload, false, null);
         assertFalse(TimerManager.isRunning(instanceId, null), "Timer should not auto-start when autoStart is false");
@@ -73,10 +73,10 @@ final class TimerSystemTest {
         TimerManager.setElapsedTicks(instanceId, 4L);
         assertEquals(4L, TimerManager.getSnapshot(instanceId).elapsedTicks(), "Elapsed ticks should be set directly");
         TimerManager.setRemainingTicks(instanceId, 3L);
-        TimerModels.TimerSnapshot snapshot = TimerManager.getSnapshot(instanceId);
+        TimerSnapshot snapshot = TimerManager.getSnapshot(instanceId);
         assertEquals(7L, snapshot.elapsedTicks(), "Remaining tick setter should update elapsed ticks consistently");
         assertEquals(3L, snapshot.remainingTicks(), "Remaining tick setter should update remaining ticks consistently");
-        TimerModels.TimerPayload replacement = new TimerModels.SoundTimerPayload("minecraft:block.note_block.harp", 1.0f, 1.0f);
+        TimerPayload replacement = new SoundTimerPayload("minecraft:block.note_block.harp", 1.0f, 1.0f);
         TimerManager.setPayload(instanceId, replacement);
         assertEquals(replacement, TimerManager.getSnapshot(instanceId).payload(), "Payload setter should replace the payload");
         TimerManager.pause(instanceId);
@@ -87,17 +87,17 @@ final class TimerSystemTest {
         assertTrue(TimerManager.isStopped(instanceId, null), "Stop should move the timer to STOPPED");
         TimerManager.reset(instanceId, true);
         snapshot = TimerManager.getSnapshot(instanceId);
-        assertEquals(TimerModels.TimerStatus.IDLE, snapshot.status(), "Reset should return the timer to IDLE");
+        assertEquals(TimerStatus.IDLE, snapshot.status(), "Reset should return the timer to IDLE");
         assertEquals(0L, snapshot.elapsedTicks(), "Reset should clear elapsed ticks");
         assertNull(snapshot.payload(), "Reset with clearPayload should remove the payload");
     }
     @Test
     void timerSnapshotRequiresPayloadWhenMissing() {
-        TimerModels.TimerSnapshot snapshot = new TimerModels.TimerSnapshot(
+        TimerSnapshot snapshot = new TimerSnapshot(
                 1,
                 2L,
                 null,
-                TimerModels.TimerStatus.IDLE,
+                TimerStatus.IDLE,
                 0L,
                 0L,
                 null,
@@ -131,4 +131,8 @@ final class TimerSystemTest {
         field.setAccessible(true);
         ((AtomicInteger) field.get(null)).set(value);
     }
+
+    private record RespawnTimerPayload(UUID playerId, boolean allowSkip) implements TimerPayload {}
+
+    private record SoundTimerPayload(String soundId, float volume, float pitch) implements TimerPayload {}
 }

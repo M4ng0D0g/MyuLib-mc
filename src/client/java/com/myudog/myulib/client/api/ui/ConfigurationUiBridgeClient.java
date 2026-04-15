@@ -2,34 +2,36 @@ package com.myudog.myulib.client.api.ui;
 
 import com.myudog.myulib.api.permission.ScopeLayer;
 import com.myudog.myulib.api.ui.ConfigurationUiBridge;
+import net.minecraft.resources.Identifier;
+
 import java.util.Objects;
 
 public final class ConfigurationUiBridgeClient implements ConfigurationUiBridge {
-    private String lastFieldId;
-    private String lastIdentityGroupId;
-    private String lastRoleGroupId;
-    private String lastTeamId;
+    private Identifier lastFieldId;
+    private Identifier lastIdentityGroupId;
+    private Identifier lastRoleGroupId;
+    private Identifier lastTeamId;
     private ScopeLayer lastPermissionLayer;
     private String lastPermissionScopeId;
 
     @Override
-    public void openFieldEditor(String fieldId) {
-        lastFieldId = Objects.requireNonNullElse(fieldId, "");
+    public void openFieldEditor(Identifier fieldId) {
+        lastFieldId = fieldId;
     }
 
     @Override
-    public void openIdentityGroupEditor(String groupId) {
-        lastIdentityGroupId = Objects.requireNonNullElse(groupId, "");
+    public void openIdentityGroupEditor(Identifier groupId) {
+        lastIdentityGroupId = groupId;
     }
 
     @Override
-    public void openRoleGroupEditor(String groupId) {
-        lastRoleGroupId = Objects.requireNonNullElse(groupId, "");
+    public void openRoleGroupEditor(Identifier groupId) {
+        lastRoleGroupId = groupId;
     }
 
     @Override
-    public void openTeamEditor(String teamId) {
-        lastTeamId = Objects.requireNonNullElse(teamId, "");
+    public void openTeamEditor(Identifier teamId) {
+        lastTeamId = teamId;
     }
 
     @Override
@@ -38,19 +40,19 @@ public final class ConfigurationUiBridgeClient implements ConfigurationUiBridge 
         lastPermissionScopeId = Objects.requireNonNullElse(scopeId, "");
     }
 
-    public String lastFieldId() {
+    public Identifier lastFieldId() {
         return lastFieldId;
     }
 
-    public String lastIdentityGroupId() {
+    public Identifier lastIdentityGroupId() {
         return lastIdentityGroupId;
     }
 
-    public String lastRoleGroupId() {
+    public Identifier lastRoleGroupId() {
         return lastRoleGroupId;
     }
 
-    public String lastTeamId() {
+    public Identifier lastTeamId() {
         return lastTeamId;
     }
 

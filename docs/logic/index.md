@@ -2,7 +2,7 @@
 The current gameplay flow is built from game, timer, event, and permission systems.
 A thin compatibility API also exists in `com.myudog.myulib.api.game.logic` for bridge code.
 ## Current alternatives
-- `com.myudog.myulib.api.game.GameManager`
+- `com.myudog.myulib.api.game.core.GameManager`
 - `com.myudog.myulib.api.game.core.GameDefinition`
 - `com.myudog.myulib.api.game.core.GameInstance`
 - `com.myudog.myulib.api.game.state.GameState`

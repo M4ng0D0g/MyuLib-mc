@@ -6,6 +6,7 @@ import com.myudog.myulib.api.permission.PermissionDecision;
 import com.myudog.myulib.api.permission.PermissionManager;
 import com.myudog.myulib.api.rolegroup.RoleGroupDefinition;
 import com.myudog.myulib.api.rolegroup.RoleGroupManager;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.phys.AABB;
 import org.junit.jupiter.api.Test;
@@ -41,14 +42,15 @@ final class AccessSystemsTest {
         ));
         assertEquals(nether, FieldManager.get(spawnId).dimensionId(), "Field dimension should update after re-registration");
         UUID playerId = UUID.fromString("00000000-0000-0000-0000-000000000123");
+        Identifier builderId = Identifier.fromNamespaceAndPath("myulib", "builder");
         RoleGroupManager.register(new RoleGroupDefinition(
-                "builder",
-                "Builder",
+                builderId,
+                Component.literal("Builder"),
                 10,
                 Map.of(),
                 new HashSet<>()
         ));
-        RoleGroupManager.assign(playerId, "builder");
+        RoleGroupManager.assign(playerId, builderId);
         List<String> playerGroups = RoleGroupManager.getSortedGroupIdsOf(playerId);
         assertTrue(playerGroups.contains("builder"), "Player should be assigned to the builder role group");
         assertTrue(playerGroups.contains("everyone"), "Player should always include the everyone role group");

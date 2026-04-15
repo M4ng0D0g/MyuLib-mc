@@ -5,6 +5,7 @@ import com.myudog.myulib.api.permission.PermissionAction;
 import com.myudog.myulib.api.permission.PermissionDecision;
 import com.myudog.myulib.api.permission.PermissionManager;
 import com.myudog.myulib.api.rolegroup.RoleGroupManager;
+import net.minecraft.network.chat.Component;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
@@ -23,11 +24,14 @@ final class AccessCommandServiceTest {
         RoleGroupManager.clear();
         PermissionManager.clear();
         FieldManager.clear();
-        RoleGroupManager.bindRoot(tempDir);
+        CommandRegistry.clear();
         assertDoesNotThrow(AccessCommandService::registerDefaults,
                 "registerDefaults should only attach the command callback");
-        AccessCommandService.createRoleGroup("builders", "Builders", 7);
-        assertEquals("Builders", RoleGroupManager.get("builders").displayName(),
+        assertTrue(CommandRegistry.snapshot().containsKey("myulib:save"),
+                "registerDefaults should register the /myulib: local command mirror");
+        Identifier builderId = Identifier.fromNamespaceAndPath("myulib", "builders");
+        AccessCommandService.createRoleGroup(builderId, Component.literal("Builders"), 7);
+        assertEquals("Builders", RoleGroupManager.get(builderId).translationKey().getString(),
                 "createRoleGroup should register the new group");
         AccessCommandService.grantGlobalPermission("builders", PermissionAction.BLOCK_PLACE, PermissionDecision.ALLOW);
         assertEquals(PermissionDecision.ALLOW,
@@ -42,11 +46,17 @@ final class AccessCommandServiceTest {
         );
         AccessCommandService.createField(field);
         assertEquals(field, FieldManager.get(fieldId), "createField should register the field");
-        assertTrue(AccessCommandService.listRoleGroups().stream().anyMatch(group -> group.id().equals("builders")),
+        assertTrue(AccessCommandService.listRoleGroups().stream().anyMatch(group -> group.id().equals(builderId)),
                 "listRoleGroups should include the created group");
         AccessCommandService.deleteField(fieldId);
-        AccessCommandService.deleteRoleGroup("builders");
+        AccessCommandService.deleteRoleGroup(builderId);
         assertNull(FieldManager.get(fieldId), "deleteField should remove the field");
-        assertNull(RoleGroupManager.get("builders"), "deleteRoleGroup should remove the role group");
+        assertNull(RoleGroupManager.get(builderId), "deleteRoleGroup should remove the role group");
+
+        CommandResult save = CommandRegistry.execute(new CommandContext("console", "myulib:save", Map.of()));
+        assertTrue(save.success(), "The mirrored myulib:save command should execute successfully");
+        CommandResult status = CommandRegistry.execute(new CommandContext("console", "myulib:status", Map.of()));
+        assertTrue(status.success(), "The mirrored myulib:status command should execute successfully");
+        assertTrue(status.message().contains("field="), "Status output should include field count");
     }
 }

@@ -14,6 +14,10 @@ public class PermissionTable {
         return rules.getOrDefault(action, PermissionDecision.UNSET);
     }
 
+    public Map<PermissionAction, PermissionDecision> rulesSnapshot() {
+        return Map.copyOf(rules);
+    }
+
     public void clear() {
         rules.clear();
     }

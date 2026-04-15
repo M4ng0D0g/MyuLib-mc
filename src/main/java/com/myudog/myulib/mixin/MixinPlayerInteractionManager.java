@@ -1,13 +1,10 @@
 package com.myudog.myulib.mixin;
 
-import com.myudog.myulib.api.field.FieldDefinition;
-import com.myudog.myulib.api.field.FieldManager;
+import com.myudog.myulib.api.debug.DebugTraceManager;
 import com.myudog.myulib.api.permission.PermissionAction;
 import com.myudog.myulib.api.permission.PermissionDecision;
-import com.myudog.myulib.api.permission.PermissionManager;
-import com.myudog.myulib.api.rolegroup.RoleGroupManager;
+import com.myudog.myulib.api.permission.PermissionGate;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.ServerPlayerGameMode;
@@ -15,8 +12,18 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.BucketItem;
+import net.minecraft.world.item.EggItem;
+import net.minecraft.world.item.EnderpearlItem;
+import net.minecraft.world.item.FireChargeItem;
+import net.minecraft.world.item.FlintAndSteelItem;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ProjectileWeaponItem;
+import net.minecraft.world.item.SnowballItem;
+import net.minecraft.world.item.SpawnEggItem;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.BlockHitResult;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -24,8 +31,6 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-
-import java.util.Optional;
 
 @Mixin(ServerPlayerGameMode.class)
 public class MixinPlayerInteractionManager {
@@ -37,45 +42,77 @@ public class MixinPlayerInteractionManager {
     // 🎯 攔截 1: 破壞方塊
     @Inject(method = "destroyBlock", at = @At("HEAD"), cancellable = true)
     private void onBlockBreak(BlockPos pos, CallbackInfoReturnable<Boolean> cir) {
-        // 核心：使用被破壞的方塊座標 (pos) 去找 Field，而不是玩家座標！
-        Identifier dimId = level.dimension().identifier();
-        Optional<FieldDefinition> targetField = FieldManager.findAt(dimId, pos.getCenter());
-
-        PermissionDecision decision = PermissionManager.evaluate(
-                player.getUUID(),
-                RoleGroupManager.getSortedGroupIdsOf(player.getUUID()),
-                PermissionAction.BLOCK_BREAK,
-                targetField.map(FieldDefinition::id).orElse(null),
-                dimId
-        );
+        DebugTraceManager.begin(player, "destroyBlock");
+        DebugTraceManager.step(player, "pos=" + pos.getX() + "," + pos.getY() + "," + pos.getZ());
+        PermissionDecision decision = PermissionGate.evaluateDecision(player, PermissionAction.BLOCK_BREAK, pos.getCenter());
+        DebugTraceManager.step(player, "decision=" + decision);
 
         if (decision == PermissionDecision.DENY) {
             cir.setReturnValue(false); // 取消破壞
+            DebugTraceManager.end(player, "result=DENY");
+            return;
         }
+        DebugTraceManager.end(player, "result=ALLOW");
     }
 
     // 🎯 攔截 2: 對方塊點擊右鍵 (放置方塊、開箱子、用水桶)
-    @Inject(method = "interactBlock", at = @At("HEAD"), cancellable = true)
+    // Keep compatibility across mapping/version rename: interactBlock -> useItemOn
+    @Inject(method = "useItemOn", at = @At("HEAD"), cancellable = true, require = 0)
     private void onInteractBlock(ServerPlayer player, Level level, ItemStack stack, InteractionHand hand, BlockHitResult hitResult, CallbackInfoReturnable<InteractionResult> cir) {
-        BlockPos targetPos = hitResult.getBlockPos();
-        Identifier dimId = level.dimension().identifier();
-        Optional<FieldDefinition> targetField = FieldManager.findAt(dimId, hitResult.getLocation());
+        BlockState state = level.getBlockState(hitResult.getBlockPos());
+        PermissionAction action = classifyBlockAction(state, stack);
 
-        // 判斷動作：手拿方塊就是 PLACE，拿水桶就是 USE_BUCKET，空手就是 INTERACT
-        PermissionAction action = PermissionAction.INTERACT_BLOCK;
-        if (stack.getItem() instanceof BlockItem) action = PermissionAction.BLOCK_PLACE;
-        else if (stack.getItem() instanceof BucketItem) action = PermissionAction.USE_BUCKET;
-
-        PermissionDecision decision = PermissionManager.evaluate(
-                player.getUUID(),
-                RoleGroupManager.getSortedGroupIdsOf(player.getUUID()),
-                action,
-                targetField.map(FieldDefinition::id).orElse(null),
-                dimId
-        );
-
+        DebugTraceManager.begin(player, "useItemOn");
+        DebugTraceManager.step(player, "action=" + action);
+        DebugTraceManager.step(player, "blockPos=" + hitResult.getBlockPos().getX() + "," + hitResult.getBlockPos().getY() + "," + hitResult.getBlockPos().getZ());
+        PermissionDecision decision = PermissionGate.evaluateDecision(player, action, hitResult.getLocation());
+        DebugTraceManager.step(player, "decision=" + decision);
         if (decision == PermissionDecision.DENY) {
-            cir.setReturnValue(InteractionResult.FAIL); // 阻止右鍵行為
+            cir.setReturnValue(InteractionResult.FAIL);
+            DebugTraceManager.end(player, "result=DENY");
+            return;
         }
+        DebugTraceManager.end(player, "result=ALLOW");
+    }
+
+    @Inject(method = "useItem", at = @At("HEAD"), cancellable = true, require = 0)
+    private void onUseItem(ServerPlayer player, Level level, ItemStack stack, InteractionHand hand, CallbackInfoReturnable<InteractionResult> cir) {
+        PermissionAction action = classifyItemAction(stack);
+        DebugTraceManager.begin(player, "useItem");
+        DebugTraceManager.step(player, "action=" + action);
+        PermissionDecision decision = PermissionGate.evaluateDecision(player, action, player.position());
+        DebugTraceManager.step(player, "decision=" + decision);
+        if (decision == PermissionDecision.DENY) {
+            cir.setReturnValue(InteractionResult.FAIL);
+            DebugTraceManager.end(player, "result=DENY");
+            return;
+        }
+        DebugTraceManager.end(player, "result=ALLOW");
+    }
+
+    private static PermissionAction classifyBlockAction(BlockState state, ItemStack stack) {
+        if (stack.getItem() instanceof BlockItem) return PermissionAction.BLOCK_PLACE;
+        if (stack.getItem() instanceof BucketItem) return PermissionAction.USE_BUCKET;
+        if (stack.getItem() instanceof FlintAndSteelItem || stack.getItem() instanceof FireChargeItem) return PermissionAction.IGNITE_BLOCK;
+        if (stack.getItem() instanceof SpawnEggItem) return PermissionAction.USE_SPAWN_EGG;
+
+        if (state.hasBlockEntity()) return PermissionAction.OPEN_CONTAINER;
+        if (state.hasProperty(BlockStateProperties.POWERED)) return PermissionAction.TRIGGER_REDSTONE;
+        if (state.is(Blocks.NETHER_PORTAL) || state.is(Blocks.END_PORTAL) || state.is(Blocks.END_GATEWAY)) {
+            return PermissionAction.USE_PORTAL;
+        }
+
+        return PermissionAction.INTERACT_BLOCK;
+    }
+
+    private static PermissionAction classifyItemAction(ItemStack stack) {
+        if (stack.getItem() instanceof SpawnEggItem) return PermissionAction.USE_SPAWN_EGG;
+        if (stack.getItem() instanceof ProjectileWeaponItem
+                || stack.getItem() instanceof SnowballItem
+                || stack.getItem() instanceof EggItem
+                || stack.getItem() instanceof EnderpearlItem) {
+            return PermissionAction.USE_PROJECTILE;
+        }
+        return PermissionAction.USE_ITEM;
     }
 }

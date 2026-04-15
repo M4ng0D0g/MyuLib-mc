@@ -4,6 +4,8 @@ import com.myudog.myulib.api.animation.Easing;
 import com.myudog.myulib.api.camera.CameraModifier;
 import com.myudog.myulib.api.camera.CameraTrackingTarget;
 import com.myudog.myulib.api.camera.CameraTransform;
+import net.minecraft.client.Minecraft; // 🌟 新增 Import
+import net.minecraft.world.level.Level;    // 🌟 新增 Import
 import net.minecraft.world.phys.Vec3;
 
 final class PathAnimationModifier implements CameraModifier {
@@ -26,13 +28,21 @@ final class PathAnimationModifier implements CameraModifier {
         long elapsed = Math.max(0L, nowMillis - startedAt);
         float progress = Math.min(1.0f, (float) elapsed / (float) durationMillis);
         float eased = (float) easing.apply(progress);
-        Vec3 to = target.resolvePosition();
+
+        // 🌟 修正重點 1：取得客戶端當前的世界 (Level)
+        // 由於這段程式碼是在客戶端的渲染迴圈中執行的，這樣呼叫是絕對安全的
+        Level level = Minecraft.getInstance().level;
+
+        // 🌟 修正重點 2：將 level 傳入以進行「動態實體座標解析」
+        Vec3 to = target.resolvePosition(level);
+
         double x = start.x + (to.x - start.x) * eased;
         double y = start.y + (to.y - start.y) * eased;
         double z = start.z + (to.z - start.z) * eased;
         transform.setPosition(x, y, z);
 
-        Vec3 lookAt = target.resolveLookAt();
+        // 🌟 修正重點 3：將 level 傳入以進行「動態注視點解析」
+        Vec3 lookAt = target.resolveLookAt(level);
         if (lookAt != null) {
             Vec3 forward = lookAt.subtract(transform.position());
             double horizontal = Math.sqrt(forward.x * forward.x + forward.z * forward.z);
@@ -47,4 +57,3 @@ final class PathAnimationModifier implements CameraModifier {
         return nowMillis - startedAt >= durationMillis;
     }
 }
-

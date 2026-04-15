@@ -1,8 +1,5 @@
 package com.myudog.myulib.api.game;
-import com.myudog.myulib.api.game.core.GameConfig;
-import com.myudog.myulib.api.game.core.GameData;
-import com.myudog.myulib.api.game.core.GameDefinition;
-import com.myudog.myulib.api.game.core.GameInstance;
+import com.myudog.myulib.api.game.core.*;
 import com.myudog.myulib.api.game.object.GameObjectKind;
 import com.myudog.myulib.api.game.state.BasicGameStateMachine;
 import com.myudog.myulib.api.game.state.GameState;
@@ -11,19 +8,40 @@ import com.myudog.myulib.api.game.state.GameStateMachine;
 import com.myudog.myulib.internal.event.EventDispatcherImpl;
 import net.minecraft.resources.Identifier;
 import org.junit.jupiter.api.Test;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 final class GameSystemTest {
+    private static final AtomicInteger ENTER_CALLS = new AtomicInteger();
+    private static final AtomicInteger TICK_CALLS = new AtomicInteger();
+    private static final AtomicInteger EXIT_CALLS = new AtomicInteger();
+
     private enum TestState implements GameState {
         PREPARE,
         ACTIVE,
-        FINISHED
+        FINISHED;
+
+        @Override
+        public void onEnter(GameInstance<?, ?, ?> instance) {
+            ENTER_CALLS.incrementAndGet();
+        }
+
+        @Override
+        public void onTick(GameInstance<?, ?, ?> instance, long tickCount) {
+            TICK_CALLS.incrementAndGet();
+        }
+
+        @Override
+        public void onExit(GameInstance<?, ?, ?> instance) {
+            EXIT_CALLS.incrementAndGet();
+        }
     }
     private static final class TestGameData extends GameData {
     }
@@ -77,6 +95,11 @@ final class GameSystemTest {
                 GameObjectKind.INTERACTABLE,
                 GameObjectKind.CUSTOM
         ), List.of(GameObjectKind.values()), "GameObjectKind should expose the current six kinds in declaration order");
+
+        int timerId = data.startNewTimer("phase", 2L, expired -> {
+        });
+        assertTrue(data.timerInstanceIds().contains(timerId), "startNewTimer should track timer instance id");
+        assertEquals("phase", data.timerTags().get(timerId), "startNewTimer should track timer tag");
         BasicGameStateMachine<TestState> machine = new BasicGameStateMachine<>(
                 TestState.PREPARE,
                 Map.of(
@@ -94,6 +117,10 @@ final class GameSystemTest {
     }
     @Test
     void gameDefinitionAndManagerCreateRunnableInstances() {
+        ENTER_CALLS.set(0);
+        TICK_CALLS.set(0);
+        EXIT_CALLS.set(0);
+
         Identifier gameId = Identifier.fromNamespaceAndPath("tests", "arena");
         TestGameDefinition definition = new TestGameDefinition(gameId);
         GameInstance<GameConfig, TestGameData, TestState> instance = null;
@@ -105,11 +132,15 @@ final class GameSystemTest {
             instance = GameManager.createInstance(gameId, GameConfig.empty());
             instanceId = instance.getInstanceId();
             assertEquals(TestState.PREPARE, instance.getCurrentState(), "New instance should start in the initial state");
+            assertEquals(1, ENTER_CALLS.get(), "Initial state should receive onEnter during instance creation");
             assertEquals(0L, instance.getTickCount(), "New instance should start with zero ticks");
             instance.tick();
             assertEquals(1L, instance.getTickCount(), "Tick should increment the instance tick counter");
+            assertTrue(TICK_CALLS.get() >= 1, "Current state should receive onTick during tick()");
             assertTrue(instance.canTransition(TestState.ACTIVE), "Instance should allow the configured transition to ACTIVE");
             assertTrue(instance.transition(TestState.ACTIVE), "Transition to ACTIVE should succeed");
+            assertTrue(EXIT_CALLS.get() >= 1, "Source state should receive onExit during transition");
+            assertTrue(ENTER_CALLS.get() >= 2, "Target state should receive onEnter during transition");
             assertEquals(TestState.ACTIVE, instance.getCurrentState(), "Current state should update after a valid transition");
             GameStateChangeEvent<TestState> event = new GameStateChangeEvent<>(instance, TestState.PREPARE, TestState.ACTIVE);
             assertTrue(event.isEntering(TestState.ACTIVE), "GameStateChangeEvent should report entering the target state");

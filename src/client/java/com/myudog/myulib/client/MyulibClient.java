@@ -1,12 +1,13 @@
 package com.myudog.myulib.client;
 
+import com.myudog.myulib.Myulib;
 import com.myudog.myulib.client.api.MyulibApiClient;
 import net.fabricmc.api.ClientModInitializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public final class MyulibClient implements ClientModInitializer {
-    private static final Logger LOGGER = LoggerFactory.getLogger("myulib");
+    private static final Logger LOGGER = LoggerFactory.getLogger(Myulib.MOD_ID);
 
     @Override
     public void onInitializeClient() {

@@ -1,5 +1,7 @@
 # Game System
-`com.myudog.myulib.api.game` is the current public entry point for game registration and instance management.
+
+`com.myudog.myulib.api.game` is the public entry point for game definition registration and instance lifecycle.
+
 ## Core types
 - `GameManager`
 - `GameDefinition`
@@ -12,15 +14,27 @@
 - `GameObjectConfig`
 - `GameObjectKind`
 - `IGameEntity`
+
 ## Related systems
 - `timer`
 - `event`
 - `ecs`
 - `field`
-- `identity`
 - `permission`
 - `team`
 - `rolegroup`
+- `camera`
+- `control`
+
 ## Notes
-- Game objects are modeled through `com.myudog.myulib.api.game.object`.
-- The old feature-heavy state-contract pages are no longer the source of truth.
+- Game objects are modeled in `com.myudog.myulib.api.game.object`.
+- `GameManager` owns instance creation/destruction and id assignment strategy.
+
+## In-game command interface
+Command root: `/myulib:game`
+
+- `create <definitionId>`
+- `read <instanceId>`
+- `update <instanceId>`
+- `delete <instanceId>`
+- `list`

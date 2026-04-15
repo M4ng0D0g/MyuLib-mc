@@ -5,7 +5,12 @@
 	"mixins": [
 		"MixinPlayerEntity",
 		"MixinPlayerInteractEntity",
-		"MixinPlayerInteractionManager"
+		"MixinPlayerInteractionManager",
+		"MixinPlayerDropPermission",
+		"MixinItemEntityPermission",
+		"MixinFarmBlockPermission",
+		"MixinServerMessagePermission",
+		"MixinEntityPortalPermission"
 	],
 	"injectors": {
 		"defaultRequire": 1

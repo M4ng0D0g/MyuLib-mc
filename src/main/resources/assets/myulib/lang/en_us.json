@@ -1,3 +1,4 @@
 {
-  "myulib.test.team.blue": "Blue Team"
+  "myulib.test.team.blue": "Blue Team",
+  "myulib.rolegroup.everyone": "@everyone"
 }
